@@ -1163,6 +1163,11 @@ empty array use is flagged^{"rules":[{"when":"big feature","use":[]}]}^exact^CRE
 array profile without harness is flagged^{"rules":[{"when":"big feature","use":[{"model":"gpt-5.5"}]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - each use profile needs harness
 array profile with malformed model is flagged^{"rules":[{"when":"big feature","use":[{"harness":"codex","model":5}]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - use profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present
 resolve fields are accepted^{"rules":[{"when":"hard design","approval":"captain","floor":{"scope":"model:fable","min_percent":20,"provider":"claude"},"use":[{"harness":"pi","model":"openai-codex/gpt-5.6-sol","provider":"codex"},{"harness":"codex","model":"gpt-5.6-sol","floor":{"scope":"all_models","min_percent":50}}]}],"default":[{"harness":"pi","model":"kimi-code/k3","provider":"kimi","floor":{"scope":"all_models","min_percent":10}}]}^empty^
+rule confidence floor is accepted^{"rules":[{"when":"depth","confidence_floor":0.3,"use":{"harness":"claude"}}]}^empty^
+string confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":"0.3","use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
+null confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":null,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
+negative confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":-0.1,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
+large confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":1.1,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
 non-captain approval is flagged^{"rules":[{"when":"hard design","approval":"firstmate","use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - approval must be "captain" when present
 rule floor without provider is flagged^{"rules":[{"when":"hard design","floor":{"scope":"model:fable","min_percent":20},"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\z
 rule floor uppercase provider is flagged^{"rules":[{"when":"hard design","floor":{"scope":"model:fable","min_percent":20,"provider":"CLAUDE"},"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\z
@@ -1200,7 +1205,7 @@ ROWS
   [ "$out" = 'CREW_DISPATCH: invalid config/crew-dispatch.json - default profile model and effort must be non-empty strings when present' ] \
     || fail "no-key default-profile diagnostic changed from main, got: $out"
 
-  printf '%s\n' '{"rules":[{"when":"legacy metadata","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}]}' > "$case_dir/home/config/crew-dispatch.json"
+  printf '%s\n' '{"rules":[{"when":"legacy metadata","confidence_floor":"invalid","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}]}' > "$case_dir/home/config/crew-dispatch.json"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
   [ -z "$out" ] || fail "resolver-only fields must be ignored without the typed key, got: $out"
