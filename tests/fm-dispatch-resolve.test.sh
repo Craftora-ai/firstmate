@@ -204,8 +204,16 @@ run() {
   local __exit=$1 __out=$2 __err=$3 _out _code before=0
   shift 3
   [ ! -f "$SHADOW_LOG" ] || before=$(wc -l < "$SHADOW_LOG")
-  _out=$(PATH="$FAKEBIN:$BASE_PATH" FM_HOME="$HOME_DIR" "$TOOL" "$@" 2> "$TMP_ROOT/stderr")
-  _code=$?
+  if [ -n "${FAKE_SHADOW_GATE:-}" ]; then
+    # Capture both streams through the pipe to detect saved stderr descriptors
+    # as well as saved stdout descriptors in the background recorder.
+    _out=$(PATH="$FAKEBIN:$BASE_PATH" FM_HOME="$HOME_DIR" "$TOOL" "$@" 2>&1)
+    _code=$?
+    : > "$TMP_ROOT/stderr"
+  else
+    _out=$(PATH="$FAKEBIN:$BASE_PATH" FM_HOME="$HOME_DIR" "$TOOL" "$@" 2> "$TMP_ROOT/stderr")
+    _code=$?
+  fi
   if [ -n "${FAKE_SHADOW_GATE:-}" ]; then
     # If command substitution retained a shadow stdout/stderr descriptor it
     # could not return until the mock timed out, before this gate was opened.

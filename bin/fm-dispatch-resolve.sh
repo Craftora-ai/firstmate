@@ -315,7 +315,9 @@ command -v curl >/dev/null 2>&1 || emit_error "curl not installed"
         }
       }
     }')
-  if { exec 4> >(exec >/dev/null 2>&1; record_stakes_shadow); } 2>/dev/null; then
+  # Do not wrap this exec in a stderr redirection: Bash saves the old stderr
+  # descriptor and the recorder would then keep a caller's capture pipe open.
+  if exec 4> >(exec >/dev/null 2>&1; record_stakes_shadow); then
     SHADOW_OPEN=true
   fi
   T0=$(fm_timing_now_ms)
