@@ -54,12 +54,13 @@
 #   the captain-approval gate, or fm-spawn.sh validation; it publishes one
 #   inspectable answer plus every candidate's evidence, in code.
 #
-# Confidence: docs/configuration.md "Crew dispatch profiles" owns the
+# Confidence: docs/configuration.md "Crew dispatch profiles" owns the per-rule
 #   confidence_floor and strongest-reasoning declarations. The floor and the
 #   strongest-class declaration are properties of the profile set actually
-#   selected, so a quota fall-through to default reads the default set's own
-#   declarations; bin/fm-dispatch-lib.sh owns the global default floor both
-#   this tool and the bootstrap diagnostic apply.
+#   selected, so a direct default match and a quota fall-through to default
+#   alike take the global floor and no missing-confidence waiver;
+#   bin/fm-dispatch-lib.sh owns that global floor, which this tool and the
+#   bootstrap diagnostic both apply.
 # Shadow: an independent stakes Choice runs concurrently with the live request,
 #   with the same five-second curl bound and descriptor-only key handling.
 #   The live path never waits for it. A pipe hands the final live evidence to
@@ -193,12 +194,7 @@ rules_err=$(jq -r --argjson confidence_floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --a
   elif any((.rules // [])[]; has("approval") and .approval != "captain") then "approval must be \"captain\" when present"
   elif any((.rules // [])[]; has("confidence_floor") and ((.confidence_floor | type) != "number" or .confidence_floor < 0 or .confidence_floor > 1)) then "rule confidence_floor must be a number 0..1"
   elif any((.rules // [])[]; has("strongest_reasoning") and (.strongest_reasoning | type) != "boolean") then "rule strongest_reasoning must be a boolean"
-  elif has("default_strongest_reasoning") and (.default_strongest_reasoning | type) != "boolean" then "default_strongest_reasoning must be a boolean"
-  elif has("default_strongest_reasoning") and (has("default") | not) then "default_strongest_reasoning requires default profiles"
-  elif has("default_confidence_floor") and ((.default_confidence_floor | type) != "number" or .default_confidence_floor < 0 or .default_confidence_floor > 1) then "default_confidence_floor must be a number 0..1"
-  elif has("default_confidence_floor") and (has("default") | not) then "default_confidence_floor requires default profiles"
   elif any((.rules // [])[]; has("confidence_floor") and .confidence_floor < $confidence_floor and .strongest_reasoning != true) then "rule confidence_floor below \($confidence_floor) requires strongest_reasoning: true"
-  elif has("default_confidence_floor") and .default_confidence_floor < $confidence_floor and .default_strongest_reasoning != true then "default_confidence_floor below \($confidence_floor) requires default_strongest_reasoning: true"
   elif any((.rules // [])[]; has("select") and ((.select | type) != "string" or (.select | length) == 0)) then "select must be a non-empty string"
   elif any((.rules // [])[]; has("select") and .select != "quota-balanced") then
     "unknown select: " + ([.rules[] | select(has("select") and .select != "quota-balanced") | .select] | unique | join(", "))
@@ -480,9 +476,9 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
      then {source: "default", use: profiles($cfg.default // null), note: "rule \($choice) floor \($rule.floor.scope) below \($rule.floor.min_percent)%: fall through to default"}
    else {source: $choice, use: profiles($rule.use), note: "rule matched"} end) as $sel |
   ($floor | tonumber) as $global_floor |
-  (if $sel.source == "default" then ($cfg.default_confidence_floor // $global_floor)
+  (if $sel.source == "default" then $global_floor
    else ($rule.confidence_floor // $global_floor) end) as $confidence_floor |
-  (if $sel.source == "default" then $cfg.default_strongest_reasoning == true
+  (if $sel.source == "default" then false
    else $rule.strongest_reasoning == true end) as $strongest |
   {
     model: $r.model, latency_ms: $lat, tokens: ($r.usage // null),

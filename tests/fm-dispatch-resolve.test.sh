@@ -500,17 +500,18 @@ write_response "$RESPONSE" rule_3 null
 jq '.rules[2].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" '  status: escalate' "missing confidence never bypasses captain approval"
+# The strongest-class declaration and a below-global floor are per-rule only,
+# so a default selection always answers to the global floor.
 write_response "$RESPONSE" default null
-for strongest in false true; do
-  jq --argjson strongest "$strongest" '.default_strongest_reasoning = $strongest' "$BASE_RULES" > "$RULES"
-  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-  if [ "$strongest" = true ]; then expected=clear; else expected=ambiguous; fi
-  assert_contains "$out" "  status: $expected" "default missing confidence follows its own declaration: $strongest"
-done
-jq '.default_strongest_reasoning = true | .default_confidence_floor = 0.9' "$BASE_RULES" > "$RULES"
+cp "$BASE_RULES" "$RULES"
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: ambiguous' "a raised default floor survives a missing confidence too"
-assert_contains "$out" 'floor 0.9 not cleared' "the raised default floor is named"
+assert_contains "$out" '  status: ambiguous' "a default selection carrying no confidence is ambiguous"
+assert_contains "$out" 'floor 0.6 not cleared' "the default selection answers to the global floor"
+assert_contains "$out" '  note: no rule matched' "a direct default match states its own selection"
+assert_not_contains "$out" '  profile:' "no rule and no confidence never reaches a dispatch"
+jq '.rules[3].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: ambiguous' "an unmatched rule's declaration cannot clear a default selection"
 # Rule 1 falls through to default under the fixture quota. Both lower and
 # higher rule confidence floors must stop governing that default selection.
 for rule_floor in 0.3 0.8; do
@@ -530,44 +531,18 @@ for rule_floor in 0.3 0.8; do
     fi
   done
 done
-jq '.rules[0].strongest_reasoning = false | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
-write_response "$RESPONSE" rule_1 null
-TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: clear' "fallback may use the default strongest declaration"
-write_response "$RESPONSE" rule_1 0.41
-TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: ambiguous' "default declaration does not lower the global numeric floor"
-# The default set carries its own floor, and it governs every selection that
-# actually lands on the default profiles.
-jq '.default_confidence_floor = 0.3' "$BASE_RULES" > "$RULES"
+# A direct default match answers to the global floor in both directions.
+cp "$BASE_RULES" "$RULES"
 write_response "$RESPONSE" default 0.41
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-expect_code 2 "$code" "a lower default floor without the default declaration is refused"
-assert_contains "$err" 'default_confidence_floor below 0.6 requires default_strongest_reasoning: true' "the default direction guard names its declaration"
-jq '.default_confidence_floor = 0.3 | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
-TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: clear' "a declared strongest default clears below the global floor"
-assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "the cleared default emits its ranked profile"
-jq '.default_confidence_floor = 0.8' "$BASE_RULES" > "$RULES"
-write_response "$RESPONSE" default 0.7
-TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: ambiguous' "a higher default floor rejects above the global floor"
-assert_contains "$out" 'confidence 0.7 below floor 0.8' "the default floor is explained"
+assert_contains "$out" '  status: ambiguous' "a direct default match below the global floor hands back"
+assert_contains "$out" 'confidence 0.41 below floor 0.6' "the global floor is explained"
 assert_contains "$out" '  note: no rule matched' "a direct default match states its own selection"
 assert_not_contains "$out" '  profile:' "a rejected default emits no profile"
-# Rule 1 still falls through to default under the fixture quota: the default
-# set's floor governs there, and the matched rule's own floor never follows it.
-jq '.rules[0] += {confidence_floor: 0.3, strongest_reasoning: true} | .default_confidence_floor = 0.8' "$BASE_RULES" > "$RULES"
-write_response "$RESPONSE" rule_1 0.7
+write_response "$RESPONSE" default 0.7
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: ambiguous' "fall-through obeys the default floor, not the lower rule floor"
-assert_contains "$out" 'confidence 0.7 below floor 0.8' "fall-through explains the default floor"
-assert_contains "$out" '  note: rule rule_1 floor model:fable below 20%: fall through to default' "the reported floor is reconcilable with the stated fall-through"
-jq '.rules[0].confidence_floor = 0.9 | .default_confidence_floor = 0.3 | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
-write_response "$RESPONSE" rule_1 0.41
-TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: clear' "fall-through clears on the default floor despite a higher rule floor"
-assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "fall-through chooses default profiles"
+assert_contains "$out" '  status: clear' "a direct default match above the global floor resolves"
+assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "the cleared default emits its ranked profile"
 cp "$BASE_RULES" "$RULES"
 pass "confidence floors enforce declared direction and follow the selected profile set"
 
@@ -1068,15 +1043,6 @@ for bad in \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":0.3,"strongest_reasoning":false}]}|rule confidence_floor below 0.6 requires strongest_reasoning: true' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":"true"}]}|rule strongest_reasoning must be a boolean' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":null}]}|rule strongest_reasoning must be a boolean' \
-  '{"default":{"harness":"claude"},"default_strongest_reasoning":"true"}|default_strongest_reasoning must be a boolean' \
-  '{"default":{"harness":"claude"},"default_strongest_reasoning":null}|default_strongest_reasoning must be a boolean' \
-  '{"default_strongest_reasoning":true}|default_strongest_reasoning requires default profiles' \
-  '{"default":{"harness":"claude"},"default_confidence_floor":0.3}|default_confidence_floor below 0.6 requires default_strongest_reasoning: true' \
-  '{"default":{"harness":"claude"},"default_confidence_floor":0.3,"default_strongest_reasoning":false}|default_confidence_floor below 0.6 requires default_strongest_reasoning: true' \
-  '{"default":{"harness":"claude"},"default_confidence_floor":"0.3"}|default_confidence_floor must be a number 0..1' \
-  '{"default":{"harness":"claude"},"default_confidence_floor":null}|default_confidence_floor must be a number 0..1' \
-  '{"default":{"harness":"claude"},"default_confidence_floor":1.1}|default_confidence_floor must be a number 0..1' \
-  '{"default_confidence_floor":0.8}|default_confidence_floor requires default profiles' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":"0.3"}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":null}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":-0.1}]}|rule confidence_floor must be a number 0..1' \

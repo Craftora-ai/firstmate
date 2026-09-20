@@ -1169,17 +1169,6 @@ false strongest with lower confidence floor is flagged^{"rules":[{"when":"depth"
 higher confidence floor needs no declaration^{"rules":[{"when":"depth","confidence_floor":0.8,"use":{"harness":"claude"}}]}^empty^
 string strongest declaration is flagged^{"rules":[{"when":"depth","strongest_reasoning":"true","use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule strongest_reasoning must be a boolean
 null strongest declaration is flagged^{"rules":[{"when":"depth","strongest_reasoning":null,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule strongest_reasoning must be a boolean
-default strongest declaration is accepted^{"default":{"harness":"claude"},"default_strongest_reasoning":true}^empty^
-false default strongest declaration is accepted^{"default":{"harness":"claude"},"default_strongest_reasoning":false}^empty^
-string default strongest declaration is flagged^{"default":{"harness":"claude"},"default_strongest_reasoning":"true"}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_strongest_reasoning must be a boolean
-null default strongest declaration is flagged^{"default":{"harness":"claude"},"default_strongest_reasoning":null}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_strongest_reasoning must be a boolean
-default strongest declaration needs profiles^{"default_strongest_reasoning":true}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_strongest_reasoning requires default profiles
-strongest default confidence floor is accepted^{"default":{"harness":"claude"},"default_confidence_floor":0.3,"default_strongest_reasoning":true}^empty^
-undeclared lower default confidence floor is flagged^{"default":{"harness":"claude"},"default_confidence_floor":0.3}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_confidence_floor below 0.6 requires default_strongest_reasoning: true
-higher default confidence floor needs no declaration^{"default":{"harness":"claude"},"default_confidence_floor":0.8}^empty^
-string default confidence floor is flagged^{"default":{"harness":"claude"},"default_confidence_floor":"0.3"}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_confidence_floor must be a number 0..1
-null default confidence floor is flagged^{"default":{"harness":"claude"},"default_confidence_floor":null}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_confidence_floor must be a number 0..1
-default confidence floor needs profiles^{"default_confidence_floor":0.8}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_confidence_floor requires default profiles
 string confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":"0.3","use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
 null confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":null,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
 negative confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":-0.1,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
@@ -1221,7 +1210,7 @@ ROWS
   [ "$out" = 'CREW_DISPATCH: invalid config/crew-dispatch.json - default profile model and effort must be non-empty strings when present' ] \
     || fail "no-key default-profile diagnostic changed from main, got: $out"
 
-  printf '%s\n' '{"rules":[{"when":"legacy metadata","confidence_floor":"invalid","strongest_reasoning":"invalid","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}],"default_strongest_reasoning":"invalid","default_confidence_floor":"invalid"}' > "$case_dir/home/config/crew-dispatch.json"
+  printf '%s\n' '{"rules":[{"when":"legacy metadata","confidence_floor":"invalid","strongest_reasoning":"invalid","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}]}' > "$case_dir/home/config/crew-dispatch.json"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
   [ -z "$out" ] || fail "resolver-only fields must be ignored without the typed key, got: $out"

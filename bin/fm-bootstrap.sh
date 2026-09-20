@@ -1197,12 +1197,7 @@ crew_dispatch_validate() {
     elif $typed and ([(.rules // [])[]? | select(has("approval") and .approval != "captain")] | length > 0) then "approval must be \"captain\" when present"
     elif $typed and any((.rules // [])[]; has("confidence_floor") and ((.confidence_floor | type) != "number" or .confidence_floor < 0 or .confidence_floor > 1)) then "rule confidence_floor must be a number 0..1"
     elif $typed and any((.rules // [])[]; has("strongest_reasoning") and (.strongest_reasoning | type) != "boolean") then "rule strongest_reasoning must be a boolean"
-    elif $typed and has("default_strongest_reasoning") and (.default_strongest_reasoning | type) != "boolean" then "default_strongest_reasoning must be a boolean"
-    elif $typed and has("default_strongest_reasoning") and (has("default") | not) then "default_strongest_reasoning requires default profiles"
-    elif $typed and has("default_confidence_floor") and ((.default_confidence_floor | type) != "number" or .default_confidence_floor < 0 or .default_confidence_floor > 1) then "default_confidence_floor must be a number 0..1"
-    elif $typed and has("default_confidence_floor") and (has("default") | not) then "default_confidence_floor requires default profiles"
     elif $typed and any((.rules // [])[]; has("confidence_floor") and .confidence_floor < $confidence_floor and .strongest_reasoning != true) then "rule confidence_floor below \($confidence_floor) requires strongest_reasoning: true"
-    elif $typed and has("default_confidence_floor") and .default_confidence_floor < $confidence_floor and .default_strongest_reasoning != true then "default_confidence_floor below \($confidence_floor) requires default_strongest_reasoning: true"
     elif $typed and ([(.rules // [])[]? | select(has("floor") and floor_bad(.floor; true))] | length > 0) then "rule floor needs scope, min_percent 0..100, and provider matching ^[a-z0-9]+(-[a-z0-9]+)*\\z"
     elif [(.rules // [])[]? | select(has("select") and ((.select? | type) != "string" or (.select | length) == 0))] | length > 0 then "select must be a non-empty string"
     elif [(.rules // [])[]? | .select? // empty | select(. != "quota-balanced")] | length > 0 then
