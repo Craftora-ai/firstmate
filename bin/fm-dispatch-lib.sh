@@ -12,4 +12,5 @@
 # CREW_DISPATCH diagnostic, so the validator that must catch a bad floor and
 # the resolver that enforces it can never disagree about where the floor is.
 
+# shellcheck disable=SC2034 # Shared floor consumed by the sourcing callers named above.
 FM_DISPATCH_CONFIDENCE_FLOOR=0.6
