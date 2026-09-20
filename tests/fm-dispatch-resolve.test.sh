@@ -498,6 +498,7 @@ for rule_floor in 0.3 0.8; do
       tail -1 "$SHADOW_LOG" | jq -e '.live.rule == "rule_1" and .live.confidence == 0.7 and .live.profile.model == "cursor-grok-4.6-high"' >/dev/null || fail "shadow must distinguish matched rule from selected default profile"
     else
       assert_contains "$out" 'floor 0.6' "fallback explains the global floor"
+      assert_contains "$out" '  note: rule rule_1 floor model:fable below 20%: fall through to default' "an ambiguous fall-through names the set the floor belongs to"
       assert_not_contains "$out" '  profile:' "fallback cannot borrow strongest rule authority"
     fi
   done
@@ -525,6 +526,7 @@ write_response "$RESPONSE" default 0.7
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" '  status: ambiguous' "a higher default floor rejects above the global floor"
 assert_contains "$out" 'confidence 0.7 below floor 0.8' "the default floor is explained"
+assert_contains "$out" '  note: no rule matched' "a direct default match states its own selection"
 assert_not_contains "$out" '  profile:' "a rejected default emits no profile"
 # Rule 1 still falls through to default under the fixture quota: the default
 # set's floor governs there, and the matched rule's own floor never follows it.
@@ -533,6 +535,7 @@ write_response "$RESPONSE" rule_1 0.7
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" '  status: ambiguous' "fall-through obeys the default floor, not the lower rule floor"
 assert_contains "$out" 'confidence 0.7 below floor 0.8' "fall-through explains the default floor"
+assert_contains "$out" '  note: rule rule_1 floor model:fable below 20%: fall through to default' "the reported floor is reconcilable with the stated fall-through"
 jq '.rules[0].confidence_floor = 0.9 | .default_confidence_floor = 0.3 | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
 write_response "$RESPONSE" rule_1 0.41
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"

@@ -490,9 +490,9 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
   } as $ev |
   if $sel.invalid then $ev + {status: "error", reason: $sel.invalid}
   elif $confidence == null and (($a.confidence != null) or ($strongest | not)) then
-    $ev + {status: "ambiguous", reason: "confidence missing or nonnumeric; floor \($confidence_floor) not cleared", candidates: ($answer_use | map(evaluate(.)))}
+    $ev + {status: "ambiguous", reason: "confidence missing or nonnumeric; floor \($confidence_floor) not cleared", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
   elif $confidence != null and $confidence < $confidence_floor then
-    $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", candidates: ($answer_use | map(evaluate(.)))}
+    $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
   elif $sel.escalate then
     $ev + {status: "escalate", reason: $sel.escalate, candidates: ($answer_use | map(evaluate(.)))}
   elif ($sel.use | length) == 0 then $ev + {status: "escalate", reason: "no profiles configured for \($sel.source)", note: $sel.note, candidates: []}
