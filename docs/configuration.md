@@ -567,6 +567,8 @@ Its purpose is one month of local calibration: the answer is recorded beside the
 The second request incurs additional API usage, but the live result never waits for its completion; a timeout, malformed answer, or recording failure cannot change live stdout, stderr, status, or exit code.
 The script header owns the append-only, safe-to-delete shadow record's path and schema.
 After the observation month, evaluate this home's labeled dispatch outcomes before proposing any routing threshold; no timer or probability promotes the shadow automatically.
+The shadow has no expiry of its own either: every resolution that reaches the live request issues the second billed request alongside it, for as long as the shadow is present.
+It stops when the operator removes it after that evaluation, which is the same operator work the sentence above describes; the code enforces neither an automatic promotion nor an automatic end.
 Merge approval, irreversible or destructive actions, security decisions, and the owner's taste, priority, and spending choices retain their existing authority boundaries.
 The live rule-match evidence is recorded in [`verification/dispatch-resolve.md`](verification/dispatch-resolve.md).
 
