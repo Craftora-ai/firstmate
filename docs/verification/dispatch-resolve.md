@@ -78,7 +78,7 @@ $ bin/fm-test-run.sh tests/fm-dispatch-resolve.test.sh tests/fm-bootstrap.test.s
 ...
 # all fm-dispatch-resolve tests passed
 ...
-$ shellcheck --norc -x bin/fm-dispatch-resolve.sh tests/fm-dispatch-resolve.test.sh
+$ shellcheck --norc -x bin/fm-dispatch-lib.sh bin/fm-dispatch-resolve.sh tests/fm-dispatch-resolve.test.sh
 $ bin/fm-doc-audience-check.sh
 fm-doc-audience-check: ok surfaces=102 local_links=438
 ```
