@@ -498,8 +498,9 @@ Only a set that declares itself the strongest reasoning class may set its floor 
 A lower floor without the matching declaration is refused as malformed configuration, never clamped or silently honored.
 Floors at or above the global default remain legal for every set, and the declaration alone does not reduce a numeric floor.
 The operator owns this assertion for every candidate in the set; code neither ranks classes nor infers strength from harness or model names.
-An absent or null answer confidence may clear only for the selected set's strongest-reasoning declaration; otherwise it returns `ambiguous`.
-A present nonnumeric confidence, including a numeric string, always returns `ambiguous`, even for a declared strongest set with a zero floor; a numeric confidence outside 0..1 remains a malformed-response error.
+An absent or null answer confidence may clear only for a selected set that both declares the strongest reasoning class and keeps its floor at or below the global default; a set that raises its floor above the global default keeps that raised floor for a missing confidence too, so weaker evidence never clears where stronger evidence would not.
+Any other absent or null confidence returns `ambiguous`.
+A present confidence must be a JSON number from 0 through 1; a string, boolean, object, array, or out-of-range number is a malformed-response `error`, not model uncertainty, so a broken response contract can never be read as Jev reporting no confidence.
 The confidence exception does not bypass captain approval, quota gates, or ties.
 The confidence floor and the strongest-class declaration are properties of the profile set that is actually selected: a matched rule's selection uses that rule's own values, while a direct default match and a rule quota-floor fall-through alike use `default_confidence_floor` and `default_strongest_reasoning`, falling back to the global floor only when the default declares none, never the matched rule's confidence settings.
 A rule `floor` names the quota-axi `provider` and `scope` whose `effectivePercentRemaining` must be at least `min_percent` for the rule's profiles to apply.

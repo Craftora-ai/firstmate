@@ -361,8 +361,9 @@ command -v curl >/dev/null 2>&1 || emit_error "curl not installed"
 jq -e --slurpfile rules "$RULES" '
     (($rules[0].rules | to_entries | map("rule_" + ((.key + 1) | tostring))) + ["default"] | sort) as $choices |
     (.answers.rule.choice | type) == "string" and
-    ((.answers.rule.confidence | type) != "number" or
-      (.answers.rule.confidence >= 0 and .answers.rule.confidence <= 1)) and
+    (.answers.rule.confidence == null or
+      ((.answers.rule.confidence | type) == "number" and
+       .answers.rule.confidence >= 0 and .answers.rule.confidence <= 1)) and
     (.answers.rule.probabilities | type) == "object" and
     ((.answers.rule.probabilities | keys | sort) == $choices) and
     all(.answers.rule.probabilities[]; type == "number" and . >= 0 and . <= 1) and
@@ -478,8 +479,9 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
    elif $rule_floor_state == "below"
      then {source: "default", use: profiles($cfg.default // null), note: "rule \($choice) floor \($rule.floor.scope) below \($rule.floor.min_percent)%: fall through to default"}
    else {source: $choice, use: profiles($rule.use), note: "rule matched"} end) as $sel |
-  (if $sel.source == "default" then ($cfg.default_confidence_floor // ($floor | tonumber))
-   else ($rule.confidence_floor // ($floor | tonumber)) end) as $confidence_floor |
+  ($floor | tonumber) as $global_floor |
+  (if $sel.source == "default" then ($cfg.default_confidence_floor // $global_floor)
+   else ($rule.confidence_floor // $global_floor) end) as $confidence_floor |
   (if $sel.source == "default" then $cfg.default_strongest_reasoning == true
    else $rule.strongest_reasoning == true end) as $strongest |
   {
@@ -489,8 +491,8 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
     confidence: $confidence, probabilities: $a.probabilities
   } as $ev |
   if $sel.invalid then $ev + {status: "error", reason: $sel.invalid}
-  elif $confidence == null and (($a.confidence != null) or ($strongest | not)) then
-    $ev + {status: "ambiguous", reason: "confidence missing or nonnumeric; floor \($confidence_floor) not cleared", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
+  elif $confidence == null and (($strongest | not) or $confidence_floor > $global_floor) then
+    $ev + {status: "ambiguous", reason: "confidence missing; floor \($confidence_floor) not cleared", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
   elif $confidence != null and $confidence < $confidence_floor then
     $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
   elif $sel.escalate then

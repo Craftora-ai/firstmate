@@ -452,13 +452,18 @@ TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" '  status: ambiguous' "a higher declared floor rejects above 0.6"
 assert_contains "$out" 'confidence 0.7 below floor 0.8' "the rule floor is explained"
 assert_not_contains "$out" '  profile:' "higher floor prevents profile emission"
+# A present confidence must be numeric: a broken response contract is an error
+# outcome, never the supervisor-facing claim that Jev reported no confidence.
 for value in '"0.9"' '"not-a-number"' true '{}' '[]'; do
   jq '.rules[3] += {confidence_floor: 0, strongest_reasoning: true}' "$BASE_RULES" > "$RULES"
   write_response "$RESPONSE" rule_4 "$value"
   TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-  expect_code 0 "$code" "invalid confidence hands back to supervisor"
-  assert_contains "$out" '  status: ambiguous' "invalid confidence never clears even a zero floor: $value"
-  assert_not_contains "$out" '  profile:' "invalid confidence emits no profile"
+  expect_code 0 "$code" "a malformed confidence still exits 0"
+  assert_contains "$out" '  status: error' "a present nonnumeric confidence breaks the response contract: $value"
+  assert_contains "$out" '  reason: response is not a rule Choice answer' "the malformed response names the contract, not model uncertainty"
+  assert_not_contains "$out" '  status: ambiguous' "a broken contract is never reported as uncertainty: $value"
+  tail -1 "$SHADOW_LOG" | jq -e '.live.rule == null and .live.confidence == null' >/dev/null \
+    || fail "calibration must not record a broken contract as an answered dispatch: $value"
 done
 for missing in null absent; do
   write_response "$RESPONSE" rule_4 null
@@ -472,6 +477,24 @@ for missing in null absent; do
   jq '.rules[3].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
   TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
   assert_contains "$out" '  status: clear' "$missing confidence can clear for the declared strongest rule"
+  tail -1 "$SHADOW_LOG" | jq -e '.live.rule == "rule_4" and .live.confidence == null' >/dev/null \
+    || fail "calibration must record a genuinely unanswered confidence against its matched rule"
+  # A raised floor is the operator asking for more, so the missing-confidence
+  # exception must not waive it: weaker evidence can never clear where stronger
+  # evidence would not.
+  jq '.rules[3] += {strongest_reasoning: true, confidence_floor: 0.9}' "$BASE_RULES" > "$RULES"
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: ambiguous' "$missing confidence cannot clear a raised floor on a strongest rule"
+  assert_contains "$out" 'floor 0.9 not cleared' "the raised floor is named on the missing-confidence hand-back"
+  assert_not_contains "$out" '  profile:' "a raised floor still emits no profile without a confidence"
+  write_response "$RESPONSE" rule_4 0.89
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: ambiguous' "the same raised floor rejects a numeric confidence just below it"
+  write_response "$RESPONSE" rule_4 null
+  if [ "$missing" = absent ]; then
+    jq 'del(.answers.rule.confidence)' "$RESPONSE" > "$TMP_ROOT/no-confidence.json"
+    mv "$TMP_ROOT/no-confidence.json" "$RESPONSE"
+  fi
 done
 write_response "$RESPONSE" rule_3 null
 jq '.rules[2].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
@@ -484,6 +507,10 @@ for strongest in false true; do
   if [ "$strongest" = true ]; then expected=clear; else expected=ambiguous; fi
   assert_contains "$out" "  status: $expected" "default missing confidence follows its own declaration: $strongest"
 done
+jq '.default_strongest_reasoning = true | .default_confidence_floor = 0.9' "$BASE_RULES" > "$RULES"
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: ambiguous' "a raised default floor survives a missing confidence too"
+assert_contains "$out" 'floor 0.9 not cleared' "the raised default floor is named"
 # Rule 1 falls through to default under the fixture quota. Both lower and
 # higher rule confidence floors must stop governing that default selection.
 for rule_floor in 0.3 0.8; do
