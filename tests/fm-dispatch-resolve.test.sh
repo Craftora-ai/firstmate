@@ -424,27 +424,76 @@ done
 jq '.rules[3].confidence_floor = 0.3' "$BASE_RULES" > "$RULES"
 write_response "$RESPONSE" rule_4 0.41
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: clear' "a lower declared floor clears below 0.6"
+expect_code 2 "$code" "a lower floor without the strongest declaration is refused"
+assert_contains "$err" 'confidence_floor below 0.6 requires strongest_reasoning: true' "the direction guard explains the required declaration"
+jq '.rules[3] += {confidence_floor: 0.3, strongest_reasoning: true}' "$BASE_RULES" > "$RULES"
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: clear' "a declared strongest set clears below 0.6"
 jq '.rules[3].confidence_floor = 0.8' "$BASE_RULES" > "$RULES"
 write_response "$RESPONSE" rule_4 0.7
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" '  status: ambiguous' "a higher declared floor rejects above 0.6"
 assert_contains "$out" 'confidence 0.7 below floor 0.8' "the rule floor is explained"
 assert_not_contains "$out" '  profile:' "higher floor prevents profile emission"
-for value in null '"0.9"' '"not-a-number"' true '{}' '[]'; do
-  jq '.rules[3].confidence_floor = 0' "$BASE_RULES" > "$RULES"
+for value in '"0.9"' '"not-a-number"' true '{}' '[]'; do
+  jq '.rules[3] += {confidence_floor: 0, strongest_reasoning: true}' "$BASE_RULES" > "$RULES"
   write_response "$RESPONSE" rule_4 "$value"
   TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
   expect_code 0 "$code" "invalid confidence hands back to supervisor"
   assert_contains "$out" '  status: ambiguous' "invalid confidence never clears even a zero floor: $value"
   assert_not_contains "$out" '  profile:' "invalid confidence emits no profile"
 done
-jq 'del(.answers.rule.confidence)' "$RESPONSE" > "$TMP_ROOT/no-confidence.json"
-mv "$TMP_ROOT/no-confidence.json" "$RESPONSE"
+for missing in null absent; do
+  write_response "$RESPONSE" rule_4 null
+  if [ "$missing" = absent ]; then
+    jq 'del(.answers.rule.confidence)' "$RESPONSE" > "$TMP_ROOT/no-confidence.json"
+    mv "$TMP_ROOT/no-confidence.json" "$RESPONSE"
+  fi
+  cp "$BASE_RULES" "$RULES"
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: ambiguous' "$missing confidence without a declaration is ambiguous"
+  jq '.rules[3].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: clear' "$missing confidence can clear for the declared strongest rule"
+done
+write_response "$RESPONSE" rule_3 null
+jq '.rules[2].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: ambiguous' "absent confidence is ambiguous"
+assert_contains "$out" '  status: escalate' "missing confidence never bypasses captain approval"
+write_response "$RESPONSE" default null
+for strongest in false true; do
+  jq --argjson strongest "$strongest" '.default_strongest_reasoning = $strongest' "$BASE_RULES" > "$RULES"
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  if [ "$strongest" = true ]; then expected=clear; else expected=ambiguous; fi
+  assert_contains "$out" "  status: $expected" "default missing confidence follows its own declaration: $strongest"
+done
+# Rule 1 falls through to default under the fixture quota. Both lower and
+# higher rule confidence floors must stop governing that default selection.
+for rule_floor in 0.3 0.8; do
+  jq --argjson floor "$rule_floor" '.rules[0] += {confidence_floor: $floor, strongest_reasoning: true}' "$BASE_RULES" > "$RULES"
+  for confidence in 0.41 0.7 null; do
+    write_response "$RESPONSE" rule_1 "$confidence"
+    TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+    if [ "$confidence" = 0.7 ]; then expected=clear; else expected=ambiguous; fi
+    assert_contains "$out" "  status: $expected" "default fallback uses global floor despite rule floor $rule_floor at $confidence"
+    if [ "$expected" = clear ]; then
+      assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "fallback chooses default profiles"
+      tail -1 "$SHADOW_LOG" | jq -e '.live.rule == "rule_1" and .live.confidence == 0.7 and .live.profile.model == "cursor-grok-4.6-high"' >/dev/null || fail "shadow must distinguish matched rule from selected default profile"
+    else
+      assert_contains "$out" 'floor 0.6' "fallback explains the global floor"
+      assert_not_contains "$out" '  profile:' "fallback cannot borrow strongest rule authority"
+    fi
+  done
+done
+jq '.rules[0].strongest_reasoning = false | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
+write_response "$RESPONSE" rule_1 null
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: clear' "fallback may use the default strongest declaration"
+write_response "$RESPONSE" rule_1 0.41
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: ambiguous' "default declaration does not lower the global numeric floor"
 cp "$BASE_RULES" "$RULES"
-pass "confidence floors are per-rule, backward-compatible, and never pass missing evidence"
+pass "confidence floors enforce declared direction and follow the selected profile set"
 
 # --- shadow failures and answers cannot influence the live protocol -----------
 for live_case in clear ambiguous escalate error; do
@@ -474,7 +523,7 @@ for live_case in clear ambiguous escalate error; do
     assert_equals "$live_err" "$err" "$shadow_case leaves $live_case stderr identical"
     expect_code "$live_code" "$code" "$shadow_case leaves $live_case exit identical"
     record=$(tail -1 "$SHADOW_LOG")
-    jq -e 'keys == ["live", "stakes"] and (.live | keys) == ["confidence", "profile", "rule"] and (.stakes | keys) == ["answer", "confidence", "error", "probabilities", "status"]' <<<"$record" >/dev/null || fail "shadow record shape: $record"
+    jq -e 'keys == ["dispatch", "live", "stakes", "timestamp"] and (.dispatch | keys) == ["brief_id", "project"] and (.dispatch.brief_id | test("^sha256:[a-f0-9]{64}$")) and .dispatch.project == "" and (.timestamp | fromdateiso8601 | type) == "number" and (.live | keys) == ["confidence", "profile", "rule"] and (.stakes | keys) == ["answer", "confidence", "error", "probabilities", "status"]' <<<"$record" >/dev/null || fail "shadow record shape: $record"
     case "$shadow_case" in
       transport|http|malformed|missing) assert_equals error "$(jq -r .stakes.status <<<"$record")" "shadow failure is recorded" ;;
       *) assert_equals ok "$(jq -r .stakes.status <<<"$record")" "valid shadow is recorded" ;;
@@ -494,6 +543,25 @@ assert_not_contains "$(cat "$SHADOW_LOG")" "$KEY" "shadow history contains no ke
 assert_not_contains "$(cat "$SHADOW_LOG")" 'off-by-one' "shadow history contains no brief text"
 assert_not_contains "$(cat "$SHADOW_LOG")" 'SECRET-WHY-TEXT' "shadow history contains no private rule metadata"
 assert_not_contains "$(cat "$SHADOW_LOG")" 'A simple bug fix' "shadow history contains no rule text"
+# Calibration joins use project plus a stable path digest, with a real UTC
+# timestamp rather than brief content or private path names in the record.
+started=$(date +%s)
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF" --project sample-project
+record=$(tail -1 "$SHADOW_LOG")
+brief_id=$(jq -r .dispatch.brief_id <<<"$record")
+jq -e --argjson started "$started" --argjson finished "$(date +%s)" '
+  .dispatch.project == "sample-project" and
+  (.timestamp | fromdateiso8601) >= $started and
+  (.timestamp | fromdateiso8601) <= $finished' <<<"$record" >/dev/null || fail "shadow timestamp must locate this dispatch in UTC"
+TYPESAFE_API_KEY=$KEY run code out err "$(dirname "$BRIEF")/./brief.md" --project sample-project
+assert_equals "$brief_id" "$(tail -1 "$SHADOW_LOG" | jq -r .dispatch.brief_id)" "equivalent brief paths retain the join key"
+cp "$BRIEF" "$TMP_ROOT/other-brief.md"
+TYPESAFE_API_KEY=$KEY run code out err "$TMP_ROOT/other-brief.md" --project sample-project
+other_id=$(tail -1 "$SHADOW_LOG" | jq -r .dispatch.brief_id)
+[ "$brief_id" != "$other_id" ] || fail "different brief paths must have different join keys even for identical content"
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF" --project other-project
+tail -1 "$SHADOW_LOG" | jq -e --arg id "$brief_id" '.dispatch == {project: "other-project", brief_id: $id}' >/dev/null || fail "project distinguishes dispatches without changing the path digest"
+assert_not_contains "$(cat "$SHADOW_LOG")" "$TMP_ROOT" "shadow history contains no raw brief path"
 # Deletion must be harmless; the next append recreates the diagnostic.
 rm "$SHADOW_LOG"
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
@@ -920,6 +988,13 @@ TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 expect_code 2 "$code" "non-JSON rules exits 2"
 assert_contains "$err" 'not JSON' "non-JSON rules is named"
 for bad in \
+  '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":0.3}]}|rule confidence_floor below 0.6 requires strongest_reasoning: true' \
+  '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":0.3,"strongest_reasoning":false}]}|rule confidence_floor below 0.6 requires strongest_reasoning: true' \
+  '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":"true"}]}|rule strongest_reasoning must be a boolean' \
+  '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":null}]}|rule strongest_reasoning must be a boolean' \
+  '{"default":{"harness":"claude"},"default_strongest_reasoning":"true"}|default_strongest_reasoning must be a boolean' \
+  '{"default":{"harness":"claude"},"default_strongest_reasoning":null}|default_strongest_reasoning must be a boolean' \
+  '{"default_strongest_reasoning":true}|default_strongest_reasoning requires default profiles' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":"0.3"}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":null}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":-0.1}]}|rule confidence_floor must be a number 0..1' \

@@ -1163,7 +1163,17 @@ empty array use is flagged^{"rules":[{"when":"big feature","use":[]}]}^exact^CRE
 array profile without harness is flagged^{"rules":[{"when":"big feature","use":[{"model":"gpt-5.5"}]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - each use profile needs harness
 array profile with malformed model is flagged^{"rules":[{"when":"big feature","use":[{"harness":"codex","model":5}]}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - use profile model and effort must be non-empty strings, and provider must match ^[a-z0-9]+(-[a-z0-9]+)*\z when present
 resolve fields are accepted^{"rules":[{"when":"hard design","approval":"captain","floor":{"scope":"model:fable","min_percent":20,"provider":"claude"},"use":[{"harness":"pi","model":"openai-codex/gpt-5.6-sol","provider":"codex"},{"harness":"codex","model":"gpt-5.6-sol","floor":{"scope":"all_models","min_percent":50}}]}],"default":[{"harness":"pi","model":"kimi-code/k3","provider":"kimi","floor":{"scope":"all_models","min_percent":10}}]}^empty^
-rule confidence floor is accepted^{"rules":[{"when":"depth","confidence_floor":0.3,"use":{"harness":"claude"}}]}^empty^
+strongest rule confidence floor is accepted^{"rules":[{"when":"depth","confidence_floor":0.3,"strongest_reasoning":true,"use":{"harness":"claude"}}]}^empty^
+undeclared lower confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":0.3,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+false strongest with lower confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":0.3,"strongest_reasoning":false,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+higher confidence floor needs no declaration^{"rules":[{"when":"depth","confidence_floor":0.8,"use":{"harness":"claude"}}]}^empty^
+string strongest declaration is flagged^{"rules":[{"when":"depth","strongest_reasoning":"true","use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule strongest_reasoning must be a boolean
+null strongest declaration is flagged^{"rules":[{"when":"depth","strongest_reasoning":null,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule strongest_reasoning must be a boolean
+default strongest declaration is accepted^{"default":{"harness":"claude"},"default_strongest_reasoning":true}^empty^
+false default strongest declaration is accepted^{"default":{"harness":"claude"},"default_strongest_reasoning":false}^empty^
+string default strongest declaration is flagged^{"default":{"harness":"claude"},"default_strongest_reasoning":"true"}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_strongest_reasoning must be a boolean
+null default strongest declaration is flagged^{"default":{"harness":"claude"},"default_strongest_reasoning":null}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_strongest_reasoning must be a boolean
+default strongest declaration needs profiles^{"default_strongest_reasoning":true}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - default_strongest_reasoning requires default profiles
 string confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":"0.3","use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
 null confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":null,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
 negative confidence floor is flagged^{"rules":[{"when":"depth","confidence_floor":-0.1,"use":{"harness":"claude"}}]}^exact^CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
@@ -1205,7 +1215,7 @@ ROWS
   [ "$out" = 'CREW_DISPATCH: invalid config/crew-dispatch.json - default profile model and effort must be non-empty strings when present' ] \
     || fail "no-key default-profile diagnostic changed from main, got: $out"
 
-  printf '%s\n' '{"rules":[{"when":"legacy metadata","confidence_floor":"invalid","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}]}' > "$case_dir/home/config/crew-dispatch.json"
+  printf '%s\n' '{"rules":[{"when":"legacy metadata","confidence_floor":"invalid","strongest_reasoning":"invalid","approval":"firstmate","floor":{"scope":"all_models","min_percent":200,"provider":"CLAUDE"},"use":{"harness":"claude","provider":"Anthropic","floor":{"scope":"all_models"}}}],"default_strongest_reasoning":"invalid"}' > "$case_dir/home/config/crew-dispatch.json"
   out=$(PATH="$fakebin:$BASE_PATH" FM_HOME="$case_dir/home" FM_ROOT_OVERRIDE="$case_dir/home" \
     FM_FAKE_TREEHOUSE_LEASE_HELP=1 "$ROOT/bin/fm-bootstrap.sh")
   [ -z "$out" ] || fail "resolver-only fields must be ignored without the typed key, got: $out"

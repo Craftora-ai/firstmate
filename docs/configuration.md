@@ -465,6 +465,7 @@ This section is the single owner of the canonical schema and its per-field seman
       "when": "<natural-language condition describing a kind of task>",
       "approval": "captain",
       "confidence_floor": 0.6,
+      "strongest_reasoning": false,
       "floor": { "scope": "<quota-axi scope>", "min_percent": 20, "provider": "<quota-axi provider>" },
       "use": [
         { "harness": "<adapter>", "model": "<optional model>", "effort": "<low|medium|high|xhigh|max|ultra, optional>", "provider": "<optional quota-axi provider>", "floor": { "scope": "<quota-axi scope>", "min_percent": 50 } }
@@ -472,6 +473,7 @@ This section is the single owner of the canonical schema and its per-field seman
       "why": "<optional rationale that helps firstmate choose>"
     }
   ],
+  "default_strongest_reasoning": false,
   "default": [
     { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
   ]
@@ -482,19 +484,27 @@ Per rule, `when` and `use` are required; the top-level `rules` array itself may 
 Both `use` and the optional top-level `default` accept either one profile object or a non-empty array of profile objects.
 The single-object form stays fully backward-compatible, and every profile needs `harness`.
 Profile `model` and `effort` fields and rule `why` are optional.
-Rule `approval`, `confidence_floor`, and `floor`, and profile `provider` and `floor` are optional declarations that only [typed dispatch resolution](#typed-dispatch-resolution-env-typesafe_api_key) applies in code; without that opt-in they are inert, and firstmate's own intake reads them as ordinary hints.
+Rule `approval`, `confidence_floor`, `strongest_reasoning`, and `floor`, top-level `default_strongest_reasoning`, and profile `provider` and `floor` are optional declarations that only [typed dispatch resolution](#typed-dispatch-resolution-env-typesafe_api_key) applies in code; without that opt-in they are inert, and firstmate's own intake reads them as ordinary hints.
 The resolver supplies the fixed neutral Choice option `No listed rule applies to this task.` for work that matches no listed rule.
 `approval` accepts only `"captain"` and means a task the rule matches is never dispatched from the tool's answer alone.
-A rule `confidence_floor` is a JSON number from 0 through 1, inclusive, setting the minimum numeric rule-match confidence; omitting it preserves the global `CONFIDENCE_FLOOR` of 0.6, including for a default match.
+A rule `confidence_floor` is a JSON number from 0 through 1, inclusive, setting the minimum numeric rule-match confidence while that rule's profile set is selected; omitting it preserves the global `CONFIDENCE_FLOOR` of 0.6.
 It is independent of the quota `floor`; null, strings (including numeric strings), and out-of-range values are configuration errors.
-Missing or nonnumeric answer confidence cannot clear any floor, including zero, and returns `ambiguous`; a numeric confidence outside 0..1 remains a malformed-response error.
-Operators can express asymmetric caution with lower floors for rules that choose stronger workers and higher floors for rules that choose weaker workers; shared code never infers that direction or ranks model strength.
+A rule's optional boolean `strongest_reasoning: true` declares that its entire `use` set belongs to the strongest reasoning class in this configuration.
+The optional top-level boolean `default_strongest_reasoning: true` makes the same declaration for the existing `default` object or array and requires that set to exist.
+False or omission makes neither declaration; null and nonboolean values are configuration errors.
+Only a rule with `strongest_reasoning: true` may set `confidence_floor` below the global default; a lower floor anywhere else is refused as malformed configuration, never clamped or silently honored.
+Floors at or above the global default remain legal for every rule, and the declaration alone does not reduce a numeric floor.
+The operator owns this assertion for every candidate in the set; code neither ranks classes nor infers strength from harness or model names.
+An absent or null answer confidence may clear only for the selected set's strongest-reasoning declaration; otherwise it returns `ambiguous`.
+A present nonnumeric confidence, including a numeric string, always returns `ambiguous`, even for a declared strongest set with a zero floor; a numeric confidence outside 0..1 remains a malformed-response error.
+The confidence exception does not bypass captain approval, quota gates, or ties.
+Both a direct default match and a rule quota-floor fall-through use the global confidence floor and the default set's own declaration, never the matched rule's confidence settings.
 A rule `floor` names the quota-axi `provider` and `scope` whose `effectivePercentRemaining` must be at least `min_percent` for the rule's profiles to apply.
 A provider-only rule floor on an expanded provider binds to its `default` account row.
 An absent or unknown row or unmeasured provider makes the floor unverifiable and escalates without authorizing default routing.
 A known percentage below the floor makes the tool resolve among `default` profiles instead.
 A profile `provider` optionally names the quota-axi provider family whose rows apply to that profile; when present, profile and rule-floor provider IDs must match the strict whole-string pattern `^[a-z0-9]+(-[a-z0-9]+)*\z`.
-Bootstrap validates resolver-only `approval`, `confidence_floor`, `floor`, and present `provider` values only while typed resolution is active; without the key those inert fields and the pre-existing verified-harness baseline preserve bootstrap behavior.
+Bootstrap validates resolver-only `approval`, `confidence_floor`, `strongest_reasoning`, `default_strongest_reasoning`, `floor`, and present `provider` values only while typed resolution is active; without the key those inert fields and the pre-existing verified-harness baseline preserve bootstrap behavior.
 Typed resolution additively recognizes `gemini` because AGENTS.md section 4 verifies it for crewmate and scout dispatch.
 The opted-in resolver has authoritative single-provider mappings for `claude`, `codex`, `grok`, `kimi`, `cursor`, `agy`, and `muse`; every other verified harness must declare `provider` explicitly, including multi-provider `pi`, `pi-signed`, `omp`, and `opencode` and unmapped `gemini` and `rovo`.
 Its single-provider table is separate from the frozen legacy mapping used by `fm-quota-choose.sh`, so additions cannot alter no-key routing.
@@ -512,7 +522,7 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 When the file exists, bootstrap validates it with `jq`.
 Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
 Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
-While typed resolution is active, malformed `approval`, `confidence_floor`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
+While typed resolution is active, malformed `approval`, `confidence_floor`, `strongest_reasoning`, `default_strongest_reasoning`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.
 Secondmate homes inherit this file from the primary, so a secondmate's own crewmates apply the same dispatch profile behavior.
@@ -539,7 +549,7 @@ Known applicable rows from a provider with partial quota semantics remain rankab
 Any applicable `exhausted_now` row or known zero bound makes that candidate ineligible, and a known profile-floor shortfall does the same before unrelated quota uncertainty is considered.
 Missing or nonnumeric `spendPriority` evidence is never ranked, and every candidate is printed beside its evidence or the reason it was not rankable, including on ambiguous and approval-gated outcomes that emit no profile.
 On the opted-in path, duplicate concrete profiles with the same harness, model, and effort inside one rule or the default array are configuration errors rather than ties.
-The result is one of `clear` (a `profile:` line ready for `fm-spawn.sh`), `ambiguous` (confidence missing, nonnumeric, or below the matched rule's floor), `escalate` (an approval-gated rule, unverifiable rule floor, nothing rankable, or a genuine tie), or `error` (API, network, malformed response metadata, rendering, or quota-axi failure), and every one of them exits 0.
+The result is one of `clear` (a `profile:` line ready for `fm-spawn.sh`), `ambiguous` (confidence fails the selected profile set's confidence contract above), `escalate` (an approval-gated rule, unverifiable rule floor, nothing rankable, or a genuine tie), or `error` (API, network, malformed response metadata, rendering, or quota-axi failure), and every one of them exits 0.
 Response probabilities must contain exactly every offered choice, use numeric values from 0 through 1, and sum to approximately 1 within 0.01.
 Only a usage or configuration error exits 2: an unreadable brief, an existing but unreadable or malformed canonical rules file, or missing `jq`, each reported and never selected around.
 Missing `curl` is a normal structured `error` outcome with exit 0 so firstmate uses today's routing.

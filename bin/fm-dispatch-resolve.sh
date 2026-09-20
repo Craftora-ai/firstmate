@@ -54,15 +54,20 @@
 #   the captain-approval gate, or fm-spawn.sh validation; it publishes one
 #   inspectable answer plus every candidate's evidence, in code.
 #
-# Confidence: rule confidence_floor overrides CONFIDENCE_FLOOR (0.6); neither
-#   field is a quota floor. Missing or nonnumeric confidence is ambiguous.
+# Confidence: docs/configuration.md "Crew dispatch profiles" owns the
+#   confidence_floor and strongest-reasoning declarations; CONFIDENCE_FLOOR
+#   below is the default, including after a quota fall-through to default.
 # Shadow: an independent stakes Choice runs concurrently with the live request,
 #   with the same five-second curl bound and descriptor-only key handling.
 #   The live path never waits for it. A pipe hands the final live evidence to
 #   the detached recorder, whose stdout/stderr are closed to the caller.
 #   It appends one JSON line per attempted resolution to
 #   $FM_HOME/state/dispatch-stakes-shadow.jsonl, with stakes {status, answer,
-#   probabilities, confidence, error} and live {rule, confidence, profile}.
+#   probabilities, confidence, error}, live {rule, confidence, profile}, a UTC
+#   ISO-8601 timestamp, and dispatch {project, brief_id}. The timestamp marks
+#   recorder start; brief_id is "sha256:" plus the SHA-256 of the brief path
+#   (physical absolute parent directory plus filename, no trailing newline).
+#   This joins retries of the same path without storing the path or brief text.
 #   Unknown/invalid fields are null; errors are fixed codes, never response text.
 #   The live rule is its matched option ID, including default, not its when text;
 #   profile contains only the emitted harness/model/effort, or null if none.
@@ -141,7 +146,7 @@ VERIFIED_HARNESSES=$(fm_control_harnesses | jq -Rsc 'split("\n") | map(select(le
 
 # The fields this tool consumes must be well formed; bootstrap owns the wider
 # schema diagnostic, but an intake never selects around a malformed file.
-rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" '
+rules_err=$(jq -r --argjson confidence_floor "$CONFIDENCE_FLOOR" --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" '
   def verified($h): $verified_harnesses | index($h);
   def provider_id($p): ($p | type) == "string" and ($p | test($provider_re));
   def effort_ok($h; $m; $e):
@@ -181,6 +186,10 @@ rules_err=$(jq -r --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provi
   elif any((.rules // [])[]; (profiles(.use) | length) == 0) then "each rule needs at least one use profile"
   elif any((.rules // [])[]; has("approval") and .approval != "captain") then "approval must be \"captain\" when present"
   elif any((.rules // [])[]; has("confidence_floor") and ((.confidence_floor | type) != "number" or .confidence_floor < 0 or .confidence_floor > 1)) then "rule confidence_floor must be a number 0..1"
+  elif any((.rules // [])[]; has("strongest_reasoning") and (.strongest_reasoning | type) != "boolean") then "rule strongest_reasoning must be a boolean"
+  elif has("default_strongest_reasoning") and (.default_strongest_reasoning | type) != "boolean" then "default_strongest_reasoning must be a boolean"
+  elif has("default_strongest_reasoning") and (has("default") | not) then "default_strongest_reasoning requires default profiles"
+  elif any((.rules // [])[]; has("confidence_floor") and .confidence_floor < $confidence_floor and .strongest_reasoning != true) then "rule confidence_floor below \($confidence_floor) requires strongest_reasoning: true"
   elif any((.rules // [])[]; has("select") and ((.select | type) != "string" or (.select | length) == 0)) then "select must be a non-empty string"
   elif any((.rules // [])[]; has("select") and .select != "quota-balanced") then
     "unknown select: " + ([.rules[] | select(has("select") and .select != "quota-balanced") | .select] | unique | join(", "))
@@ -255,7 +264,8 @@ trap finish EXIT
 record_stakes_shadow() {
   # This child owns no live resources and never inherits the cleanup trap.
   trap - EXIT
-  local http shadow live request_pid
+  local http shadow live request_pid timestamp brief_path brief_id
+  timestamp=$(date -u '+%Y-%m-%dT%H:%M:%SZ') || return 0
   SHADOW_SCRATCH=$(mktemp -d) || return 0
   trap 'rm -rf "$SHADOW_SCRATCH"' EXIT
   printf '%s' "$REQUEST" | jq '
@@ -293,9 +303,20 @@ record_stakes_shadow() {
   elif [ "$http" != 000 ]; then
     shadow='{"status":"error","answer":null,"probabilities":null,"confidence":null,"error":"http"}'
   fi
+  brief_path=$(cd -- "$(dirname -- "$BRIEF")" && printf '%s/%s' "$(pwd -P)" "${BRIEF##*/}") || return 0
+  if command -v shasum >/dev/null 2>&1; then
+    brief_id=$(printf '%s' "$brief_path" | shasum -a 256) || return 0
+  elif command -v sha256sum >/dev/null 2>&1; then
+    brief_id=$(printf '%s' "$brief_path" | sha256sum) || return 0
+  else
+    return 0
+  fi
+  brief_id="sha256:${brief_id%% *}"
   umask 077
   mkdir -p "$FM_HOME/state" || return 0
-  jq -nc --argjson stakes "$shadow" --argjson live "$live" '{stakes: $stakes, live: $live}' \
+  jq -nc --arg timestamp "$timestamp" --arg project "$PROJECT" --arg brief_id "$brief_id" \
+    --argjson stakes "$shadow" --argjson live "$live" \
+    '{timestamp: $timestamp, dispatch: {project: $project, brief_id: $brief_id}, stakes: $stakes, live: $live}' \
     >> "$FM_HOME/state/dispatch-stakes-shadow.jsonl" || true
 }
 LAT_MS=null
@@ -435,7 +456,6 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
   (if $choice == "default" then null
    elif $rule_number != null and $rule_number <= (($cfg.rules // []) | length) then $cfg.rules[$rule_number - 1]
    else null end) as $rule |
-  ($rule.confidence_floor // ($floor | tonumber)) as $confidence_floor |
   ($a.confidence | if type == "number" then . else null end) as $confidence |
   (if $rule == null then "none" else floor_state($rule.floor; $rule.floor.provider; "") end) as $rule_floor_state |
   (if $choice != "default" and $rule == null then []
@@ -449,6 +469,10 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
    elif $rule_floor_state == "below"
      then {source: "default", use: profiles($cfg.default // null), note: "rule \($choice) floor \($rule.floor.scope) below \($rule.floor.min_percent)%: fall through to default"}
    else {source: $choice, use: profiles($rule.use), note: "rule matched"} end) as $sel |
+  (if $sel.source == "default" then ($floor | tonumber)
+   else ($rule.confidence_floor // ($floor | tonumber)) end) as $confidence_floor |
+  (if $sel.source == "default" then $cfg.default_strongest_reasoning == true
+   else $rule.strongest_reasoning == true end) as $strongest |
   {
     model: $r.model, latency_ms: $lat, tokens: ($r.usage // null),
     rule: $choice,
@@ -456,9 +480,9 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
     confidence: $confidence, probabilities: $a.probabilities
   } as $ev |
   if $sel.invalid then $ev + {status: "error", reason: $sel.invalid}
-  elif $confidence == null then
+  elif $confidence == null and (($a.confidence != null) or ($strongest | not)) then
     $ev + {status: "ambiguous", reason: "confidence missing or nonnumeric; floor \($confidence_floor) not cleared", candidates: ($answer_use | map(evaluate(.)))}
-  elif $confidence < $confidence_floor then
+  elif $confidence != null and $confidence < $confidence_floor then
     $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", candidates: ($answer_use | map(evaluate(.)))}
   elif $sel.escalate then
     $ev + {status: "escalate", reason: $sel.escalate, candidates: ($answer_use | map(evaluate(.)))}

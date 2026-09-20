@@ -64,7 +64,8 @@ It proves the key is absent from child environments, never appears on `curl` arg
 It proves the request uses the fixed endpoint and model, carries only the project, brief, and live rule Choice with one option per rule plus the fixed neutral none option, and never carries `why`, `use`, or quota.
 It proves the clear, default- or per-rule-floor ambiguous with candidate evidence, escalate (approval with candidate evidence, unverifiable rule floor, tie, nothing rankable), known rule-floor fall-through, known and unverifiable profile-floor evidence, explicit-provider and provider-ID enforcement, authoritative Agy and explicit-provider Gemini routing, partial providers, eligible unranked candidates and their clear-result note, concrete quota vetoes and profile-floor shortfalls taking precedence over uncertainty, account-wide quota veto, limiting-bound ranking, schema-6 account-row binding with schema-5 compatibility, missing-curl and quota-axi failures, HTTP 429 and 500, transport failure, malformed usage, zero-mass or malformed probabilities, out-of-range numeric confidence, malformed or duplicate profile, invalid selector, removed-option rejection, and out-of-range rule ID paths behave as the contract states, with configuration errors exiting 2 before any network call.
 It also exercises independent shadow success, malformed or absent answers, transport and HTTP failure, and a gated slow response against the live clear, ambiguous, escalate, and error protocol, allowing only measured latency to vary.
-It checks the shadow record's allowlisted shape, preserved probabilities and confidence, actual chosen profile, absence of brief text and credentials, append behavior, and harmless deletion.
+It checks the shadow record's allowlisted shape, preserved probabilities and confidence, actual chosen profile, UTC timestamp, stable project/path join key, absence of raw paths, brief text, and credentials, append behavior, and harmless deletion.
+Executable cases cover the strongest-class direction declaration, rejected undeclared low floors, missing versus malformed confidence, and confidence settings after quota fall-through.
 `tests/fm-bootstrap.test.sh` proves bootstrap ignores resolver-only fields without the typed key, validates each malformed shape when the environment or home `.env` activates typed resolution, and prevents an environment-provided key from reaching child processes.
 
 The shadow checks run on stock macOS Bash 3.2.57(1)-release (arm64-apple-darwin25), verified 2026-09-20 (Europe/Istanbul), with ShellCheck 0.11.0 and actionlint 1.7.12.
@@ -73,7 +74,7 @@ These are transport and composition regressions, not evidence that the stakes cl
 Question design follows TypeSafe's [agent guidance](https://docs.typesafe.ai/agent-skill), [referenced skill text](https://raw.githubusercontent.com/typesafe-ai/skills/main/skills/typesafe-ai/SKILL.md), and [Choice reference](https://docs.typesafe.ai/primitives/choice), read without installing them.
 
 ```console
-$ bin/fm-test-run.sh tests/fm-dispatch-resolve.test.sh
+$ bin/fm-test-run.sh tests/fm-dispatch-resolve.test.sh tests/fm-bootstrap.test.sh
 ...
 # all fm-dispatch-resolve tests passed
 ...
