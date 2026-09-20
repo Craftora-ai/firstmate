@@ -80,7 +80,7 @@ $ bin/fm-test-run.sh tests/fm-dispatch-resolve.test.sh tests/fm-bootstrap.test.s
 ...
 $ shellcheck --norc -x bin/fm-dispatch-resolve.sh tests/fm-dispatch-resolve.test.sh
 $ bin/fm-doc-audience-check.sh
-fm-doc-audience-check: ok surfaces=102 local_links=426
+fm-doc-audience-check: ok surfaces=102 local_links=438
 ```
 
 A live run needs a key and is not part of the suite; rerun the table above by pointing the tool at a brief with the key injected for that one command.
