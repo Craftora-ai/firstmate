@@ -464,14 +464,10 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
    else null end) as $rule |
   ($a.confidence | if type == "number" then . else null end) as $confidence |
   (if $rule == null then "none" else floor_state($rule.floor; $rule.floor.provider; "") end) as $rule_floor_state |
-  (if $choice != "default" and $rule == null then []
-   elif $rule == null then profiles($cfg.default // null)
-   else profiles($rule.use)
-   end) as $answer_use |
-  (if $choice != "default" and $rule == null then {invalid: "rule \($choice) is not in the rules file"}
+  (if $choice != "default" and $rule == null then {invalid: "rule \($choice) is not in the rules file", use: []}
    elif $rule == null then {source: "default", use: profiles($cfg.default // null), note: "no rule matched"}
-   elif ($rule.approval // "") == "captain" then {source: $choice, escalate: "rule requires the captain'"'"'s explicit approval before dispatch"}
-   elif $rule_floor_state == "unknown" then {source: $choice, escalate: "rule \($choice) floor \($rule.floor.provider)/\($rule.floor.scope) is unverifiable"}
+   elif ($rule.approval // "") == "captain" then {source: $choice, use: profiles($rule.use), escalate: "rule requires the captain'"'"'s explicit approval before dispatch"}
+   elif $rule_floor_state == "unknown" then {source: $choice, use: profiles($rule.use), escalate: "rule \($choice) floor \($rule.floor.provider)/\($rule.floor.scope) is unverifiable"}
    elif $rule_floor_state == "below"
      then {source: "default", use: profiles($cfg.default // null), note: "rule \($choice) floor \($rule.floor.scope) below \($rule.floor.min_percent)%: fall through to default"}
    else {source: $choice, use: profiles($rule.use), note: "rule matched"} end) as $sel |
@@ -488,11 +484,11 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
   } as $ev |
   if $sel.invalid then $ev + {status: "error", reason: $sel.invalid}
   elif $confidence == null and (($strongest | not) or $confidence_floor > $global_floor) then
-    $ev + {status: "ambiguous", reason: "confidence missing; floor \($confidence_floor) not cleared", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
+    $ev + {status: "ambiguous", reason: "confidence missing; floor \($confidence_floor) not cleared", note: $sel.note, candidates: ($sel.use | map(evaluate(.)))}
   elif $confidence != null and $confidence < $confidence_floor then
-    $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", note: $sel.note, candidates: ($answer_use | map(evaluate(.)))}
+    $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", note: $sel.note, candidates: ($sel.use | map(evaluate(.)))}
   elif $sel.escalate then
-    $ev + {status: "escalate", reason: $sel.escalate, candidates: ($answer_use | map(evaluate(.)))}
+    $ev + {status: "escalate", reason: $sel.escalate, candidates: ($sel.use | map(evaluate(.)))}
   elif ($sel.use | length) == 0 then $ev + {status: "escalate", reason: "no profiles configured for \($sel.source)", note: $sel.note, candidates: []}
   else
     ($sel.use | map(evaluate(.))) as $cands |

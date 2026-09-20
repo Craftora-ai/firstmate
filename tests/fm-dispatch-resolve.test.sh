@@ -527,6 +527,9 @@ for rule_floor in 0.3 0.8; do
     else
       assert_contains "$out" 'floor 0.6' "fallback explains the global floor"
       assert_contains "$out" '  note: rule rule_1 floor model:fable below 20%: fall through to default' "an ambiguous fall-through names the set the floor belongs to"
+      assert_contains "$out" 'candidate: claude:opus  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible' "the fall-through prints the default set it says it selected"
+      assert_contains "$out" 'candidate: cursor:cursor-grok-4.6-high  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible' "every default candidate carries its own evidence"
+      assert_not_contains "$out" 'candidate: claude:fable' "the profile the rule floor disqualified is never offered as a candidate"
       assert_not_contains "$out" '  profile:' "fallback cannot borrow strongest rule authority"
     fi
   done
