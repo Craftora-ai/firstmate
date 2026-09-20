@@ -495,7 +495,8 @@ Only a rule that declares itself the strongest reasoning class may set its `conf
 Floors at or above the global default remain legal for every rule, and the declaration alone does not reduce a numeric floor.
 Both declarations are per-rule only: the top-level `default` set carries neither, so an operator whose strongest reasoning class genuinely is the fallback expresses it as a catch-all rule rather than by declaring the default set.
 The operator owns this assertion for every candidate in the set; code neither ranks classes nor infers strength from harness or model names.
-An absent or null answer confidence may clear only for a selected rule that both declares the strongest reasoning class and keeps its floor at or below the global default; a rule that raises its floor above the global default keeps that raised floor for a missing confidence too, so weaker evidence never clears where stronger evidence would not.
+An absent or null answer confidence may clear only for a selected rule that both declares the strongest reasoning class and sets its `confidence_floor` strictly below the global default; a rule that leaves its floor at or above the global default keeps that floor for a missing confidence too, so weaker evidence never clears where stronger evidence would not.
+The waiver belongs to actually lowering the bar, not to the declaration on its own: a rule that declares the strongest reasoning class but never lowers its floor hands a missing confidence back exactly as it hands back a number below that floor.
 Any other absent or null confidence returns `ambiguous`.
 A present confidence must be a JSON number from 0 through 1; a string, boolean, object, array, or out-of-range number is a malformed-response `error`, not model uncertainty, so a broken response contract can never be read as Jev reporting no confidence.
 The confidence exception does not bypass captain approval, quota gates, or ties.

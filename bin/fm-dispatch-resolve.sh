@@ -483,7 +483,7 @@ RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_M
     confidence: $confidence, probabilities: $a.probabilities
   } as $ev |
   if $sel.invalid then $ev + {status: "error", reason: $sel.invalid}
-  elif $confidence == null and (($strongest | not) or $confidence_floor > $global_floor) then
+  elif $confidence == null and (($strongest | not) or $confidence_floor >= $global_floor) then
     $ev + {status: "ambiguous", reason: "confidence missing; floor \($confidence_floor) not cleared", note: $sel.note, candidates: ($sel.use | map(evaluate(.)))}
   elif $confidence != null and $confidence < $confidence_floor then
     $ev + {status: "ambiguous", reason: "confidence \($confidence) below floor \($confidence_floor)", note: $sel.note, candidates: ($sel.use | map(evaluate(.)))}

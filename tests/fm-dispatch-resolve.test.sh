@@ -474,14 +474,31 @@ for missing in null absent; do
   cp "$BASE_RULES" "$RULES"
   TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
   assert_contains "$out" '  status: ambiguous' "$missing confidence without a declaration is ambiguous"
+  # The waiver belongs to actually lowering the bar. A rule that declares the
+  # strongest class but leaves its floor at the global default hands back a
+  # missing confidence exactly as it hands back a number below that floor.
   jq '.rules[3].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
   TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-  assert_contains "$out" '  status: clear' "$missing confidence can clear for the declared strongest rule"
+  assert_contains "$out" '  status: ambiguous' "$missing confidence cannot clear a strongest rule that never lowered its floor"
+  assert_contains "$out" 'floor 0.6 not cleared' "the unlowered floor is named on the hand-back"
+  assert_not_contains "$out" '  profile:' "the declaration alone never authorizes a dispatch without a confidence"
   tail -1 "$SHADOW_LOG" | jq -e '.live.rule == "rule_4" and .live.confidence == null' >/dev/null \
     || fail "calibration must record a genuinely unanswered confidence against its matched rule"
+  write_response "$RESPONSE" rule_4 0.59
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: ambiguous' "the same rule rejects a stated 0.59, so silence cannot outrank it"
+  jq '.rules[3] += {strongest_reasoning: true, confidence_floor: 0.3}' "$BASE_RULES" > "$RULES"
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: clear' "a genuinely lowered floor accepts a stated 0.59"
+  write_response "$RESPONSE" rule_4 null
+  if [ "$missing" = absent ]; then
+    jq 'del(.answers.rule.confidence)' "$RESPONSE" > "$TMP_ROOT/no-confidence.json"
+    mv "$TMP_ROOT/no-confidence.json" "$RESPONSE"
+  fi
+  TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+  assert_contains "$out" '  status: clear' "$missing confidence clears only where the floor was actually lowered"
   # A raised floor is the operator asking for more, so the missing-confidence
-  # exception must not waive it: weaker evidence can never clear where stronger
-  # evidence would not.
+  # exception must not waive it either.
   jq '.rules[3] += {strongest_reasoning: true, confidence_floor: 0.9}' "$BASE_RULES" > "$RULES"
   TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
   assert_contains "$out" '  status: ambiguous' "$missing confidence cannot clear a raised floor on a strongest rule"
@@ -497,9 +514,9 @@ for missing in null absent; do
   fi
 done
 write_response "$RESPONSE" rule_3 null
-jq '.rules[2].strongest_reasoning = true' "$BASE_RULES" > "$RULES"
+jq '.rules[2] += {strongest_reasoning: true, confidence_floor: 0.3}' "$BASE_RULES" > "$RULES"
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
-assert_contains "$out" '  status: escalate' "missing confidence never bypasses captain approval"
+assert_contains "$out" '  status: escalate' "a waived missing confidence never bypasses captain approval"
 # The strongest-class declaration and a below-global floor are per-rule only,
 # so a default selection always answers to the global floor.
 write_response "$RESPONSE" default null
