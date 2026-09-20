@@ -55,14 +55,18 @@
 #   inspectable answer plus every candidate's evidence, in code.
 #
 # Confidence: docs/configuration.md "Crew dispatch profiles" owns the
-#   confidence_floor and strongest-reasoning declarations; CONFIDENCE_FLOOR
-#   below is the default, including after a quota fall-through to default.
+#   confidence_floor and strongest-reasoning declarations. The floor and the
+#   strongest-class declaration are properties of the profile set actually
+#   selected, so a quota fall-through to default reads the default set's own
+#   declarations; bin/fm-dispatch-lib.sh owns the global default floor both
+#   this tool and the bootstrap diagnostic apply.
 # Shadow: an independent stakes Choice runs concurrently with the live request,
 #   with the same five-second curl bound and descriptor-only key handling.
 #   The live path never waits for it. A pipe hands the final live evidence to
 #   the detached recorder, whose stdout/stderr are closed to the caller.
 #   It appends one JSON line per attempted resolution to
-#   $FM_HOME/state/dispatch-stakes-shadow.jsonl, with stakes {status, answer,
+#   dispatch-stakes-shadow.jsonl in this home's state directory
+#   (FM_STATE_OVERRIDE when set, else $FM_HOME/state), with stakes {status, answer,
 #   probabilities, confidence, error}, live {rule, confidence, profile}, a UTC
 #   ISO-8601 timestamp, and dispatch {project, brief_id}. The timestamp marks
 #   recorder start; brief_id is "sha256:" plus the SHA-256 of the brief path
@@ -84,7 +88,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 FM_ROOT="${FM_ROOT_OVERRIDE:-$(cd "$SCRIPT_DIR/.." && pwd)}"
 FM_HOME="${FM_HOME:-$FM_ROOT}"
 CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
+STATE="${FM_STATE_OVERRIDE:-$FM_HOME/state}"
 
+# shellcheck source=bin/fm-dispatch-lib.sh
+. "$SCRIPT_DIR/fm-dispatch-lib.sh"
 # shellcheck source=bin/fm-quota-axi-lib.sh
 . "$SCRIPT_DIR/fm-quota-axi-lib.sh"
 # shellcheck source=bin/fm-control-lib.sh
@@ -94,7 +101,6 @@ CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}"
 # shellcheck source=bin/fm-timing-lib.sh
 . "$SCRIPT_DIR/fm-timing-lib.sh"
 
-CONFIDENCE_FLOOR=0.6
 TS_MODEL=jev-latest
 TS_BASE=https://api.typesafe.ai
 TS_TIMEOUT=5
@@ -146,7 +152,7 @@ VERIFIED_HARNESSES=$(fm_control_harnesses | jq -Rsc 'split("\n") | map(select(le
 
 # The fields this tool consumes must be well formed; bootstrap owns the wider
 # schema diagnostic, but an intake never selects around a malformed file.
-rules_err=$(jq -r --argjson confidence_floor "$CONFIDENCE_FLOOR" --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" '
+rules_err=$(jq -r --argjson confidence_floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson verified_harnesses "$VERIFIED_HARNESSES" --arg provider_re "$FM_QUOTA_PROVIDER_ID_RE" '
   def verified($h): $verified_harnesses | index($h);
   def provider_id($p): ($p | type) == "string" and ($p | test($provider_re));
   def effort_ok($h; $m; $e):
@@ -189,7 +195,10 @@ rules_err=$(jq -r --argjson confidence_floor "$CONFIDENCE_FLOOR" --argjson verif
   elif any((.rules // [])[]; has("strongest_reasoning") and (.strongest_reasoning | type) != "boolean") then "rule strongest_reasoning must be a boolean"
   elif has("default_strongest_reasoning") and (.default_strongest_reasoning | type) != "boolean" then "default_strongest_reasoning must be a boolean"
   elif has("default_strongest_reasoning") and (has("default") | not) then "default_strongest_reasoning requires default profiles"
+  elif has("default_confidence_floor") and ((.default_confidence_floor | type) != "number" or .default_confidence_floor < 0 or .default_confidence_floor > 1) then "default_confidence_floor must be a number 0..1"
+  elif has("default_confidence_floor") and (has("default") | not) then "default_confidence_floor requires default profiles"
   elif any((.rules // [])[]; has("confidence_floor") and .confidence_floor < $confidence_floor and .strongest_reasoning != true) then "rule confidence_floor below \($confidence_floor) requires strongest_reasoning: true"
+  elif has("default_confidence_floor") and .default_confidence_floor < $confidence_floor and .default_strongest_reasoning != true then "default_confidence_floor below \($confidence_floor) requires default_strongest_reasoning: true"
   elif any((.rules // [])[]; has("select") and ((.select | type) != "string" or (.select | length) == 0)) then "select must be a non-empty string"
   elif any((.rules // [])[]; has("select") and .select != "quota-balanced") then
     "unknown select: " + ([.rules[] | select(has("select") and .select != "quota-balanced") | .select] | unique | join(", "))
@@ -313,11 +322,11 @@ record_stakes_shadow() {
   fi
   brief_id="sha256:${brief_id%% *}"
   umask 077
-  mkdir -p "$FM_HOME/state" || return 0
+  mkdir -p "$STATE" || return 0
   jq -nc --arg timestamp "$timestamp" --arg project "$PROJECT" --arg brief_id "$brief_id" \
     --argjson stakes "$shadow" --argjson live "$live" \
     '{timestamp: $timestamp, dispatch: {project: $project, brief_id: $brief_id}, stakes: $stakes, live: $live}' \
-    >> "$FM_HOME/state/dispatch-stakes-shadow.jsonl" || true
+    >> "$STATE/dispatch-stakes-shadow.jsonl" || true
 }
 LAT_MS=null
 command -v curl >/dev/null 2>&1 || emit_error "curl not installed"
@@ -377,7 +386,7 @@ quota-axi --json > "$QUOTA" 2>/dev/null || emit_error "quota-axi --json failed"
 fm_quota_json_valid < "$QUOTA" || emit_error "quota-axi --json returned an invalid snapshot"
 
 # ---- resolution: declared gates + quota evidence + argmax, all in jq ------------
-RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg none_criterion "$DEFAULT_WHEN" --argjson pmap "$PMAP" \
+RESULT=$(jq -n --arg floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg none_criterion "$DEFAULT_WHEN" --argjson pmap "$PMAP" \
   --slurpfile resp "$RESP_FILE" --slurpfile rules "$RULES" --slurpfile quota "$QUOTA" "$FM_QUOTA_ROW_JQ"'
   ($resp[0]) as $r | ($rules[0]) as $cfg | ($quota[0]) as $q | ($r.answers.rule) as $a |
   def profiles($v): if ($v | type) == "array" then $v elif ($v | type) == "object" then [$v] else [] end;
@@ -469,7 +478,7 @@ RESULT=$(jq -n --arg floor "$CONFIDENCE_FLOOR" --argjson lat "$LAT_MS" --arg non
    elif $rule_floor_state == "below"
      then {source: "default", use: profiles($cfg.default // null), note: "rule \($choice) floor \($rule.floor.scope) below \($rule.floor.min_percent)%: fall through to default"}
    else {source: $choice, use: profiles($rule.use), note: "rule matched"} end) as $sel |
-  (if $sel.source == "default" then ($floor | tonumber)
+  (if $sel.source == "default" then ($cfg.default_confidence_floor // ($floor | tonumber))
    else ($rule.confidence_floor // ($floor | tonumber)) end) as $confidence_floor |
   (if $sel.source == "default" then $cfg.default_strongest_reasoning == true
    else $rule.strongest_reasoning == true end) as $strongest |

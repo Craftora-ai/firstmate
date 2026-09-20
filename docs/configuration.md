@@ -474,6 +474,7 @@ This section is the single owner of the canonical schema and its per-field seman
     }
   ],
   "default_strongest_reasoning": false,
+  "default_confidence_floor": 0.6,
   "default": [
     { "harness": "<adapter>", "model": "<optional model>", "effort": "<optional effort>" }
   ]
@@ -484,27 +485,29 @@ Per rule, `when` and `use` are required; the top-level `rules` array itself may 
 Both `use` and the optional top-level `default` accept either one profile object or a non-empty array of profile objects.
 The single-object form stays fully backward-compatible, and every profile needs `harness`.
 Profile `model` and `effort` fields and rule `why` are optional.
-Rule `approval`, `confidence_floor`, `strongest_reasoning`, and `floor`, top-level `default_strongest_reasoning`, and profile `provider` and `floor` are optional declarations that only [typed dispatch resolution](#typed-dispatch-resolution-env-typesafe_api_key) applies in code; without that opt-in they are inert, and firstmate's own intake reads them as ordinary hints.
+Rule `approval`, `confidence_floor`, `strongest_reasoning`, and `floor`, top-level `default_strongest_reasoning` and `default_confidence_floor`, and profile `provider` and `floor` are optional declarations that only [typed dispatch resolution](#typed-dispatch-resolution-env-typesafe_api_key) applies in code; without that opt-in they are inert, and firstmate's own intake reads them as ordinary hints.
 The resolver supplies the fixed neutral Choice option `No listed rule applies to this task.` for work that matches no listed rule.
 `approval` accepts only `"captain"` and means a task the rule matches is never dispatched from the tool's answer alone.
-A rule `confidence_floor` is a JSON number from 0 through 1, inclusive, setting the minimum numeric rule-match confidence while that rule's profile set is selected; omitting it preserves the global `CONFIDENCE_FLOOR` of 0.6.
-It is independent of the quota `floor`; null, strings (including numeric strings), and out-of-range values are configuration errors.
+A rule `confidence_floor` is a JSON number from 0 through 1, inclusive, setting the minimum numeric rule-match confidence while that rule's profile set is selected; the optional top-level `default_confidence_floor` is the same field for the `default` set and requires that set to exist.
+Omitting one preserves the global floor of 0.6, owned once by `FM_DISPATCH_CONFIDENCE_FLOOR` in [`bin/fm-dispatch-lib.sh`](../bin/fm-dispatch-lib.sh) and read by both the resolver and bootstrap.
+Both are independent of the quota `floor`; null, strings (including numeric strings), and out-of-range values are configuration errors.
 A rule's optional boolean `strongest_reasoning: true` declares that its entire `use` set belongs to the strongest reasoning class in this configuration.
 The optional top-level boolean `default_strongest_reasoning: true` makes the same declaration for the existing `default` object or array and requires that set to exist.
 False or omission makes neither declaration; null and nonboolean values are configuration errors.
-Only a rule with `strongest_reasoning: true` may set `confidence_floor` below the global default; a lower floor anywhere else is refused as malformed configuration, never clamped or silently honored.
-Floors at or above the global default remain legal for every rule, and the declaration alone does not reduce a numeric floor.
+Only a set that declares itself the strongest reasoning class may set its floor below the global default: `confidence_floor` below it needs that rule's `strongest_reasoning: true`, and `default_confidence_floor` below it needs `default_strongest_reasoning: true`.
+A lower floor without the matching declaration is refused as malformed configuration, never clamped or silently honored.
+Floors at or above the global default remain legal for every set, and the declaration alone does not reduce a numeric floor.
 The operator owns this assertion for every candidate in the set; code neither ranks classes nor infers strength from harness or model names.
 An absent or null answer confidence may clear only for the selected set's strongest-reasoning declaration; otherwise it returns `ambiguous`.
 A present nonnumeric confidence, including a numeric string, always returns `ambiguous`, even for a declared strongest set with a zero floor; a numeric confidence outside 0..1 remains a malformed-response error.
 The confidence exception does not bypass captain approval, quota gates, or ties.
-Both a direct default match and a rule quota-floor fall-through use the global confidence floor and the default set's own declaration, never the matched rule's confidence settings.
+The confidence floor and the strongest-class declaration are properties of the profile set that is actually selected: a matched rule's selection uses that rule's own values, while a direct default match and a rule quota-floor fall-through alike use `default_confidence_floor` and `default_strongest_reasoning`, falling back to the global floor only when the default declares none, never the matched rule's confidence settings.
 A rule `floor` names the quota-axi `provider` and `scope` whose `effectivePercentRemaining` must be at least `min_percent` for the rule's profiles to apply.
 A provider-only rule floor on an expanded provider binds to its `default` account row.
 An absent or unknown row or unmeasured provider makes the floor unverifiable and escalates without authorizing default routing.
 A known percentage below the floor makes the tool resolve among `default` profiles instead.
 A profile `provider` optionally names the quota-axi provider family whose rows apply to that profile; when present, profile and rule-floor provider IDs must match the strict whole-string pattern `^[a-z0-9]+(-[a-z0-9]+)*\z`.
-Bootstrap validates resolver-only `approval`, `confidence_floor`, `strongest_reasoning`, `default_strongest_reasoning`, `floor`, and present `provider` values only while typed resolution is active; without the key those inert fields and the pre-existing verified-harness baseline preserve bootstrap behavior.
+Bootstrap validates resolver-only `approval`, `confidence_floor`, `strongest_reasoning`, `default_strongest_reasoning`, `default_confidence_floor`, `floor`, and present `provider` values only while typed resolution is active; without the key those inert fields and the pre-existing verified-harness baseline preserve bootstrap behavior.
 Typed resolution additively recognizes `gemini` because AGENTS.md section 4 verifies it for crewmate and scout dispatch.
 The opted-in resolver has authoritative single-provider mappings for `claude`, `codex`, `grok`, `kimi`, `cursor`, `agy`, and `muse`; every other verified harness must declare `provider` explicitly, including multi-provider `pi`, `pi-signed`, `omp`, and `opencode` and unmapped `gemini` and `rovo`.
 Its single-provider table is separate from the frozen legacy mapping used by `fm-quota-choose.sh`, so additions cannot alter no-key routing.
@@ -522,7 +525,7 @@ See [`docs/examples/crew-dispatch.json`](examples/crew-dispatch.json) for a star
 When the file exists, bootstrap validates it with `jq`.
 Valid files stay silent by default; with `FM_BOOTSTRAP_VERBOSE_FACTS=1`, bootstrap emits `BOOTSTRAP_INFO: crew dispatch active config/crew-dispatch.json`, one `BOOTSTRAP_INFO:` fact per rule, and one fact for the optional default profile set.
 Malformed JSON, malformed rules, an empty or malformed profile array, an unverified harness, or an effort value unsupported by that harness is reported as `CREW_DISPATCH: invalid config/crew-dispatch.json - ...`.
-While typed resolution is active, malformed `approval`, `confidence_floor`, `strongest_reasoning`, `default_strongest_reasoning`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
+While typed resolution is active, malformed `approval`, `confidence_floor`, `strongest_reasoning`, `default_strongest_reasoning`, `default_confidence_floor`, `floor`, and present `provider` declarations receive the same diagnostic; without the key those inert declarations preserve the pre-existing bootstrap behavior.
 Missing `jq` is reported through the normal `MISSING: jq` install-consent flow.
 While the file remains present, no crewmate or scout spawn may proceed without an explicit resolved harness; malformed configuration must be reported and corrected rather than selected around.
 Secondmate homes inherit this file from the primary, so a secondmate's own crewmates apply the same dispatch profile behavior.

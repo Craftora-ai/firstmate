@@ -269,7 +269,24 @@ cp "$BASE_RULES" "$OVERRIDE_CONFIG/crew-dispatch.json"
 reset_log
 TYPESAFE_API_KEY=$KEY FM_CONFIG_OVERRIDE="$OVERRIDE_CONFIG" run code out err "$BRIEF" --project pager
 assert_contains "$out" '  status: clear' "FM_CONFIG_OVERRIDE selects the canonical rules directory"
-pass "TYPESAFE_API_KEY= in .env activates the tool; environment and config overrides work"
+# The shadow recorder writes into this home's state directory, which
+# FM_STATE_OVERRIDE redirects for every other state writer too.
+OVERRIDE_STATE="$TMP_ROOT/override-state"
+OVERRIDE_SHADOW="$OVERRIDE_STATE/dispatch-stakes-shadow.jsonl"
+home_shadow_lines=0
+[ ! -f "$SHADOW_LOG" ] || home_shadow_lines=$(wc -l < "$SHADOW_LOG" | tr -d ' ')
+reset_log
+out=$(PATH="$FAKEBIN:$BASE_PATH" FM_HOME="$HOME_DIR" FM_STATE_OVERRIDE="$OVERRIDE_STATE" \
+  TYPESAFE_API_KEY=$KEY "$TOOL" "$BRIEF" --project pager 2>/dev/null)
+assert_contains "$out" '  status: clear' "FM_STATE_OVERRIDE leaves the live result unchanged"
+for ((shadow_wait=0; shadow_wait<100; shadow_wait++)); do
+  [ -s "$OVERRIDE_SHADOW" ] && break
+  sleep 0.1
+done
+assert_equals 1 "$(wc -l < "$OVERRIDE_SHADOW" 2>/dev/null | tr -d ' ')" "the shadow record follows FM_STATE_OVERRIDE"
+assert_equals "$home_shadow_lines" "$( [ -f "$SHADOW_LOG" ] && wc -l < "$SHADOW_LOG" | tr -d ' ' || echo 0)" "a redirected shadow never lands in the home state directory"
+rm -rf "$OVERRIDE_STATE"
+pass "TYPESAFE_API_KEY= in .env activates the tool; environment, config, and state overrides work"
 
 # --- clear: request shape, secret handling, argmax --------------------------
 reset_log
@@ -492,6 +509,35 @@ assert_contains "$out" '  status: clear' "fallback may use the default strongest
 write_response "$RESPONSE" rule_1 0.41
 TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
 assert_contains "$out" '  status: ambiguous' "default declaration does not lower the global numeric floor"
+# The default set carries its own floor, and it governs every selection that
+# actually lands on the default profiles.
+jq '.default_confidence_floor = 0.3' "$BASE_RULES" > "$RULES"
+write_response "$RESPONSE" default 0.41
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+expect_code 2 "$code" "a lower default floor without the default declaration is refused"
+assert_contains "$err" 'default_confidence_floor below 0.6 requires default_strongest_reasoning: true' "the default direction guard names its declaration"
+jq '.default_confidence_floor = 0.3 | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: clear' "a declared strongest default clears below the global floor"
+assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "the cleared default emits its ranked profile"
+jq '.default_confidence_floor = 0.8' "$BASE_RULES" > "$RULES"
+write_response "$RESPONSE" default 0.7
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: ambiguous' "a higher default floor rejects above the global floor"
+assert_contains "$out" 'confidence 0.7 below floor 0.8' "the default floor is explained"
+assert_not_contains "$out" '  profile:' "a rejected default emits no profile"
+# Rule 1 still falls through to default under the fixture quota: the default
+# set's floor governs there, and the matched rule's own floor never follows it.
+jq '.rules[0] += {confidence_floor: 0.3, strongest_reasoning: true} | .default_confidence_floor = 0.8' "$BASE_RULES" > "$RULES"
+write_response "$RESPONSE" rule_1 0.7
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: ambiguous' "fall-through obeys the default floor, not the lower rule floor"
+assert_contains "$out" 'confidence 0.7 below floor 0.8' "fall-through explains the default floor"
+jq '.rules[0].confidence_floor = 0.9 | .default_confidence_floor = 0.3 | .default_strongest_reasoning = true' "$BASE_RULES" > "$RULES"
+write_response "$RESPONSE" rule_1 0.41
+TYPESAFE_API_KEY=$KEY run code out err "$BRIEF"
+assert_contains "$out" '  status: clear' "fall-through clears on the default floor despite a higher rule floor"
+assert_contains "$out" "  profile: --harness 'cursor' --model 'cursor-grok-4.6-high'" "fall-through chooses default profiles"
 cp "$BASE_RULES" "$RULES"
 pass "confidence floors enforce declared direction and follow the selected profile set"
 
@@ -995,6 +1041,12 @@ for bad in \
   '{"default":{"harness":"claude"},"default_strongest_reasoning":"true"}|default_strongest_reasoning must be a boolean' \
   '{"default":{"harness":"claude"},"default_strongest_reasoning":null}|default_strongest_reasoning must be a boolean' \
   '{"default_strongest_reasoning":true}|default_strongest_reasoning requires default profiles' \
+  '{"default":{"harness":"claude"},"default_confidence_floor":0.3}|default_confidence_floor below 0.6 requires default_strongest_reasoning: true' \
+  '{"default":{"harness":"claude"},"default_confidence_floor":0.3,"default_strongest_reasoning":false}|default_confidence_floor below 0.6 requires default_strongest_reasoning: true' \
+  '{"default":{"harness":"claude"},"default_confidence_floor":"0.3"}|default_confidence_floor must be a number 0..1' \
+  '{"default":{"harness":"claude"},"default_confidence_floor":null}|default_confidence_floor must be a number 0..1' \
+  '{"default":{"harness":"claude"},"default_confidence_floor":1.1}|default_confidence_floor must be a number 0..1' \
+  '{"default_confidence_floor":0.8}|default_confidence_floor requires default profiles' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":"0.3"}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":null}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":-0.1}]}|rule confidence_floor must be a number 0..1' \
