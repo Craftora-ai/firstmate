@@ -1,0 +1,129 @@
+Operator transcript: bin/fm-dispatch-resolve.sh driven as firstmate runs it
+(real CLI, isolated FM_HOME; typesafe.ai and quota-axi are substituted at the
+process boundary because no TYPESAFE_API_KEY exists here and each live call is billed)
+
+=== S1  the 17-September case: a weaker worker at confidence 0.59 ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.59
+  probabilities: rule_1=0.93 default=0.07
+  reason: confidence 0.59 below floor 0.6
+  note: rule matched
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+exit=0
+
+=== S2  the same brief routed to the strongest class, confidence 0.35 ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.35
+  probabilities: rule_1=0.93 default=0.07
+  note: rule matched
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+  profile: --harness 'claude' --model 'fable' --effort 'xhigh'
+exit=0
+
+=== S3a  Jev reports no confidence at all, strongest class with a lowered floor ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: null
+  probabilities: rule_1=0.93 default=0.07
+  note: rule matched
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+  profile: --harness 'claude' --model 'fable' --effort 'xhigh'
+exit=0
+
+=== S3b  same missing confidence, ordinary (weaker) rule ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: null
+  probabilities: rule_1=0.93 default=0.07
+  reason: confidence missing; floor 0.6 not cleared
+  note: rule matched
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+exit=0
+
+=== S4  a lowered floor without the strongest-class declaration is malformed ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+error: malformed rules file: /tmp/nm-dispatch-lab/run/home/config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+exit=2
+curl called: no - refused before any network call
+--- {"when":"w","confidence_floor":0.3,"strongest_reasoning":false,"use":{"harness":"claude"}}
+error: malformed rules file: /tmp/nm-dispatch-lab/run/home/config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+exit=2
+--- {"when":"w","confidence_floor":1.4,"strongest_reasoning":true,"use":{"harness":"claude"}}
+error: malformed rules file: /tmp/nm-dispatch-lab/run/home/config/crew-dispatch.json - rule confidence_floor must be a number 0..1
+exit=2
+--- {"when":"w","strongest_reasoning":"yes","use":{"harness":"claude"}}
+error: malformed rules file: /tmp/nm-dispatch-lab/run/home/config/crew-dispatch.json - rule strongest_reasoning must be a boolean
+exit=2
+
+=== S5  a strongest rule whose quota floor fails falls through to default at the global floor ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.41
+  probabilities: rule_1=0.93 default=0.07
+  reason: confidence 0.41 below floor 0.6
+  note: rule rule_1 floor model:fable below 80%: fall through to default
+  candidate: claude:opus  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-high  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+exit=0
+
+=== S6  captain approval still outranks the waiver, with no confidence at all ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: escalate
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: null
+  probabilities: rule_1=0.93 default=0.07
+  reason: rule requires the captain's explicit approval before dispatch
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+exit=0
+
+=== S7  the stakes shadow is recorded beside the live answer and changes no routing ===
+--- stakes answer: stakes_required
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.35
+  probabilities: rule_1=0.93 default=0.07
+  note: rule matched
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+  profile: --harness 'claude' --model 'fable' --effort 'xhigh'
+--- stakes answer: not_required
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.35
+  probabilities: rule_1=0.93 default=0.07
+  note: rule matched
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+  profile: --harness 'claude' --model 'fable' --effort 'xhigh'
+--- stakes request times out (curl failure)
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.35
+  probabilities: rule_1=0.93 default=0.07
+  note: rule matched
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+  profile: --harness 'claude' --model 'fable' --effort 'xhigh'
+exit=0
+
+live output identical across all three stakes outcomes: yes
+
+--- state/dispatch-stakes-shadow.jsonl (one line per resolution)
+{"timestamp":"2026-09-20T14:43:57Z","dispatch":{"project":"vault-digest","brief_id":"sha256:8ca41ef93cdf4f0fbd12baee8156bbbc5eab5dc3010cac9fd9be2c51bd079f62"},"stakes":{"status":"ok","answer":"stakes_required","confidence":0.94,"error":null},"live":{"rule":"rule_1","confidence":0.35,"profile":{"harness":"claude","model":"fable","effort":"xhigh"}}}
+{"timestamp":"2026-09-20T14:43:57Z","dispatch":{"project":"vault-digest","brief_id":"sha256:8ca41ef93cdf4f0fbd12baee8156bbbc5eab5dc3010cac9fd9be2c51bd079f62"},"stakes":{"status":"ok","answer":"not_required","confidence":0.88,"error":null},"live":{"rule":"rule_1","confidence":0.35,"profile":{"harness":"claude","model":"fable","effort":"xhigh"}}}
+{"timestamp":"2026-09-20T14:43:57Z","dispatch":{"project":"vault-digest","brief_id":"sha256:8ca41ef93cdf4f0fbd12baee8156bbbc5eab5dc3010cac9fd9be2c51bd079f62"},"stakes":{"status":"error","answer":null,"confidence":null,"error":"transport"},"live":{"rule":"rule_1","confidence":0.35,"profile":{"harness":"claude","model":"fable","effort":"xhigh"}}}

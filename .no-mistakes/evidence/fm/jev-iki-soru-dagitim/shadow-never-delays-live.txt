@@ -1,0 +1,14 @@
+
+=== S9  a slow stakes shadow never delays the live answer ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.35
+  probabilities: rule_1=0.93 default=0.07
+  note: rule matched
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+  profile: --harness 'claude' --model 'fable' --effort 'xhigh'
+exit=0
+live answer returned after 1 s (shadow request holds for 4 s)
+shadow record landed afterwards: {"stakes":"stakes_required","live":{"rule":"rule_1","confidence":0.35,"profile":{"harness":"claude","model":"fable","effort":"xhigh"}}}

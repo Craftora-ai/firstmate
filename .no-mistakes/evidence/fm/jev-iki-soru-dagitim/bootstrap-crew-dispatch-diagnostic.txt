@@ -1,0 +1,31 @@
+Operator transcript: bin/fm-bootstrap.sh CREW_DISPATCH diagnostic on the new declarations
+
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"Unattended writes into the vault.","confidence_floor":0.3,"use":{"harness":"claude","model":"sonnet"}}]}
+$ bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"Unattended writes into the vault.","confidence_floor":0.3,"strongest_reasoning":false,"use":{"harness":"claude","model":"sonnet"}}]}
+$ bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"Unattended writes into the vault.","confidence_floor":1.4,"strongest_reasoning":true,"use":{"harness":"claude","model":"fable"}}]}
+$ bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - rule confidence_floor must be a number 0..1
+
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"Unattended writes into the vault.","strongest_reasoning":"yes","use":{"harness":"claude","model":"fable"}}]}
+$ bin/fm-bootstrap.sh
+CREW_DISPATCH: invalid config/crew-dispatch.json - rule strongest_reasoning must be a boolean
+
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"Unattended writes into the vault.","confidence_floor":0.3,"strongest_reasoning":true,"use":{"harness":"claude","model":"fable","effort":"xhigh"}}]}
+$ bin/fm-bootstrap.sh
+(no CREW_DISPATCH diagnostic - configuration accepted)
+
+$ cat config/crew-dispatch.json
+{"rules":[{"when":"Unattended writes into the vault.","confidence_floor":0.8,"use":{"harness":"claude","model":"sonnet"}}]}
+$ bin/fm-bootstrap.sh
+(no CREW_DISPATCH diagnostic - configuration accepted)

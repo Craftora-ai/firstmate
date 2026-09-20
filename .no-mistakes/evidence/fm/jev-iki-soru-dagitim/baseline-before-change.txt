@@ -1,0 +1,31 @@
+
+=== BASELINE (base commit a09090d) S1  weaker worker at 0.59 ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.59
+  probabilities: rule_1=0.93 default=0.07
+  reason: confidence 0.59 below floor 0.6
+  candidate: claude:sonnet  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  -> eligible
+  candidate: cursor:cursor-grok-4.6-medium  provider=cursor  scope=all_models  remaining=91%  spendPriority=0.7597  runway=through_reset  -> eligible
+
+=== BASELINE (base commit a09090d) S2  strongest class with confidence_floor 0.3 at 0.35 ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve:
+  status: ambiguous
+  model: jev-1.13.0   latency_ms: <measured>   tokens: 812/60
+  rule: rule_1 (Unattended writes into the vault.)   confidence: 0.35
+  probabilities: rule_1=0.93 default=0.07
+  reason: confidence 0.35 below floor 0.6
+  candidate: claude:fable  provider=claude  scope=all_models  remaining=79%  spendPriority=-0.4627  runway=projected_exhaustion  bounds=all_models:79%/projected_exhaustion,model:fable:55%/through_reset  -> eligible
+
+=== BASELINE (base commit a09090d) S3a  no confidence at all, strongest class ===
+$ fm-dispatch-resolve.sh brief.md --project vault-digest
+dispatch-resolve: error (response is not a rule Choice answer)
+dispatch-resolve:
+  status: error
+  reason: response is not a rule Choice answer
+
+=== BASELINE (base commit a09090d) shadow record present? ===
+no state/dispatch-stakes-shadow.jsonl written
