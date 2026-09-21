@@ -1,0 +1,11 @@
+ok - configured Codex home reaches ship, scout, and secondmate processes with and without filtering
+ok - absent Codex home preserves both ambient and unset destination environments
+ok - configured Codex home changes Codex launches only
+ok - invalid Codex directory settings refuse before launch or metadata
+ok - unresolvable relative spawn overrides fail with named diagnostics
+ok - codex receives --model and model_reasoning_effort profile flags
+ok - codex Luna receives --model and model_reasoning_effort max profile flags
+ok - codex omits max for models without the catalog capability
+ok - a codex crewmate launches with no hook layer and keeps its turn-end signal
+ok - a codex secondmate keeps the project hook layer its primary session runs on
+exit=

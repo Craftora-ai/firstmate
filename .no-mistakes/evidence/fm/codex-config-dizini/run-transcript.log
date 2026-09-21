@@ -1,0 +1,31 @@
+lab session: fm-lab-codexhome-61623-12910
+== spawn cxhA (config/codex-home=/Users/xphoid/.codex-alfred): rc=0
+spawned cxhA harness=codex kind=scout window=fm-lab-codexhome-61623-12910:w1:p2 worktree=/Users/xphoid/.treehouse/proj-2b99f8/1/proj
+window=fm-lab-codexhome-61623-12910:w1:p2
+harness=codex
+kind=scout
+backend=herdr
+== spawn cxhB (relative path): rc=1 ; error: config/codex-home must contain one absolute directory path without control characters
+cxhB: no task record written
+workspaces after refusal: firstmate
+pane count after refusal: 1
+== spawn cxhC (no config/codex-home): rc=0
+spawned cxhC harness=codex kind=scout window=fm-lab-codexhome-61623-12910:w1:p3 worktree=/Users/xphoid/.treehouse/proj-2b99f8/2/proj
+window=fm-lab-codexhome-61623-12910:w1:p3
+harness=codex
+kind=scout
+backend=herdr
+== running Codex process env for cxhA
+66369 codex
+CODEX_HOME=%s\n'
+CODEX_HOME=<value
+FM_TASK_ID=cxhA
+CODEX_HOME=/Users/xphoid/.codex-alfred
+== running Codex process env for cxhC
+70111 codex
+CODEX_HOME=%s\n'
+CODEX_HOME=<value
+FM_TASK_ID=cxhC
+== pane cxhA (w1:p2) saved
+== pane cxhC (w1:p3) saved
+teardown ok (default-session tripwire intact)

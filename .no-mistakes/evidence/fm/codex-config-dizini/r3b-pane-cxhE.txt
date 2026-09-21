@@ -1,0 +1,21 @@
+treehouse get
+❯ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/proj-5f3a18/1/proj. Type 'exit' to return.
+❯ export GOTMPDIR=/tmp/fm-cxhE/gotmp
+export COMPACT_ADVISER_DISABLE=1
+❯ export COMPACT_ADVISER_DISABLE=1
+❯ export FM_TASK_ID=cxhE
+❯ . '/tmp/fm-cxhE+a6ef6b29727f94f30e89ae9f460e70fa9c86f72f693c2525d74151b3ae8b8400/launch.s1790001577.98757.6282.sh'
+> You are in /Users/xphoid/.treehouse/proj-5f3a18/1/proj
+
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-codexhome-live.sAGL9F/proj
+
+  Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt
+  injection. Trusting the directory allows project-local config, hooks, and exec policies to load.
+
+› 1. Yes, continue
+  2. No, quit
+
+  Press enter to continue

@@ -1,0 +1,21 @@
+treehouse get
+❯ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/proj-0d9df9/2/proj. Type 'exit' to return.
+❯ export GOTMPDIR=/tmp/fm-cxhE/gotmp
+export COMPACT_ADVISER_DISABLE=1
+❯ export COMPACT_ADVISER_DISABLE=1
+❯ export FM_TASK_ID=cxhE
+❯ . '/tmp/fm-cxhE+4f7774cbb23362b7e7c7a25740a153ba5cb96cba638fe6f10c8cc1b00ddf719c/launch.s1790001536.87136.16391.sh'
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.154.0)                   │
+│                                              │
+│ model:       loading   /model to change      │
+│ directory:   ~/.treehouse/proj-0d9df9/2/proj │
+│ permissions: YOLO mode                       │
+╰──────────────────────────────────────────────╯
+
+
+› Ask Codex to do anything
+
+  ? for shortcuts

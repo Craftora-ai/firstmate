@@ -1,0 +1,72 @@
+treehouse get
+❯ treehouse get
+🌳 Setting up worktree...
+🌳 Entered worktree at ~/.treehouse/proj-0d9df9/1/proj. Type 'exit' to return.
+❯ export GOTMPDIR=/tmp/fm-cxhD/gotmp
+export COMPACT_ADVISER_DISABLE=1
+❯ export COMPACT_ADVISER_DISABLE=1
+❯ export FM_TASK_ID=cxhD
+❯ . '/tmp/fm-cxhD+4f7774cbb23362b7e7c7a25740a153ba5cb96cba638fe6f10c8cc1b00ddf719c/launch.s1790001522.82361.14714.sh'
+╭──────────────────────────────────────────────╮
+│ >_ OpenAI Codex (v0.154.0)                   │
+│                                              │
+│ model:       gpt-6-astra   /model to change  │
+│ directory:   ~/.treehouse/proj-0d9df9/1/proj │
+│ permissions: YOLO mode                       │
+╰──────────────────────────────────────────────╯
+
+  Tip: This is GPT-6, a new generation of intelligence. Astra is state-of-the-art in coding, computer use, science, and
+  professional work. Give it a hard problem, a half-formed idea, or anything you've been meaning to build. See where it
+  takes you.
+
+
+› FIRSTMATE_OP: v1 launch-brief: # Current worker role contract
+  You are a crewmate: an autonomous worker agent managed by firstmate.
+  This section establishes your current identity before every project or task instruction below and supersedes any
+  conflicting role identity in those instructions.
+  Do the assigned work yourself and report only to firstmate; do not adopt a firstmate or secondmate supervisor
+  identity, delegate the task, run fleet supervision, or address the captain.
+  Your steering inbox is `/private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-codexhome-live.QnZdeL/fmhome/
+  state/cxhD.inbox`; this exact path belongs to your current task even when it is outside the worktree or under the
+  supervising firstmate home, so read and acknowledge its messages and do not reject it as another home's state.
+  Never inspect or change any other home's endpoint namespace; this authorization is limited to the exact task paths
+  named by this brief.
+  When this task works on Firstmate itself, the repository root `AGENTS.md` (also imported by `CLAUDE.md`) is project
+  content and the supervisor contract for the firstmate managing you: follow this brief instead of that supervisor
+  contract.
+  Project instructions still govern the work wherever they do not conflict with this worker identity, including
+  `CONTRIBUTING.md` and `firstmate-coding-guidelines` for Firstmate changes.
+
+  # Task
+  ## Captain's intent
+  Report which Codex configuration directory this worker process runs on.
+
+  ## Firstmate spec
+  Run exactly these shell commands and nothing else, then stop and do not edit any file:
+  1. printf 'REPORT CODEX_HOME=%s\n' "${CODEX_HOME-unset}"
+  2. codex mcp list
+  3. ls "${CODEX_HOME:-$HOME/.codex}/skills/" | wc -l
+  Then reply with one line: DONE CODEX_HOME=<value from step 1>.
+
+
+• I’ll run the three commands and report the configuration directory.
+
+• Ran printf 'REPORT CODEX_HOME=%s\n' "${CODEX_HOME-unset}"
+  └ REPORT CODEX_HOME=/private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-codexhome-live.QnZdeL/cx-primary
+
+• Ran codex mcp list
+  └ Name       Command                                                            Args  Env  Cwd  Status   Auth
+    brave      /Users/xphoid/alfred/config/mcp/brave/launch-brave-mcp.sh          -     -    -    enabled  Unsupported
+    dfs-mcp    /Users/xphoid/alfred/config/mcp/dfs/launch-dfs-mcp.sh              -     -    -    enabled  Unsupported
+    exa        /Users/xphoid/alfred/config/mcp/exa/launch-exa-mcp.sh              -     -    -    enabled  Unsupported
+    firecrawl  /Users/xphoid/alfred/config/mcp/firecrawl/launch-firecrawl-mcp.sh  -     -    -    enabled  Unsupported
+
+• Ran ls "${CODEX_HOME:-$HOME/.codex}/skills/" | wc -l
+  └       18
+
+• Working (12s • esc to interrupt)
+
+
+› Ask Codex to do anything
+
+  gpt-6-astra default · ~/.treehouse/proj-0d9df9/1/proj · Review worker role contract

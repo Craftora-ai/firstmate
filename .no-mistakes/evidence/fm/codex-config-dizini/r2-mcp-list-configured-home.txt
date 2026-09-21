@@ -1,0 +1,5 @@
+Name       Command                                                            Args  Env  Cwd  Status   Auth       
+brave      /Users/xphoid/alfred/config/mcp/brave/launch-brave-mcp.sh          -     -    -    enabled  Unsupported
+dfs-mcp    /Users/xphoid/alfred/config/mcp/dfs/launch-dfs-mcp.sh              -     -    -    enabled  Unsupported
+exa        /Users/xphoid/alfred/config/mcp/exa/launch-exa-mcp.sh              -     -    -    enabled  Unsupported
+firecrawl  /Users/xphoid/alfred/config/mcp/firecrawl/launch-firecrawl-mcp.sh  -     -    -    enabled  Unsupported

@@ -1,0 +1,16 @@
+lab session: fm-lab-codexhome-98639-23784
+== spawn cxhE (trust only /Users/xphoid/.treehouse): rc=0
+spawned cxhE harness=codex kind=scout window=fm-lab-codexhome-98639-23784:w1:p2 worktree=/Users/xphoid/.treehouse/proj-5f3a18/1/proj
+window=fm-lab-codexhome-98639-23784:w1:p2
+harness=codex
+kind=scout
+backend=herdr
+== pane cxhE saved after ~20s
+   > You are in /Users/xphoid/.treehouse/proj-5f3a18/1/proj
+     Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+     /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-codexhome-live.sAGL9F/proj
+     Do you trust the contents of this directory? Working with untrusted contents comes with higher risk of prompt
+ 2555 codex
+FM_TASK_ID=cxhE
+CODEX_HOME=/private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-codexhome-live.sAGL9F/cx-wtroot
+teardown ok (default-session tripwire intact)
