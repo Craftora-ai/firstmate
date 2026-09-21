@@ -371,7 +371,7 @@ For omp secondmate launches, `fm-spawn.sh` passes no `-e` at all: omp auto-disco
 
 The optional local, gitignored `config/codex-home` selects the Codex configuration directory for workers launched from this Firstmate home, including scouts, secondmates, and relaunches.
 Create the directory and put its absolute path in that file, for example `/home/alex/.codex-firstmate`; provision the desired Codex login, MCP registrations, and skills there before launching workers.
-Project trust also lives in that directory: its `config.toml` `[projects]` trust entries must cover the worktree roots workers run in, or Codex workers stop at the directory-trust prompt before doing any work.
+Project trust also lives in that directory: its `config.toml` `[projects]` trust entries must cover each dispatched repository's primary checkout (or a parent directory of it), or Codex workers stop at the directory-trust prompt before doing any work; Codex applies trust to the primary checkout a worktree belongs to, so trusting only the worktree roots (such as `~/.treehouse`) is not enough.
 Firstmate reads the setting on each launch and assigns `CODEX_HOME` directly to the Codex process, including when the worker environment allowlist is enabled.
 The setting takes precedence over the pane's ambient `CODEX_HOME` and does not depend on an interactive-shell function.
 An absent file preserves existing launches and environment inheritance; other harnesses receive no Codex assignment.
