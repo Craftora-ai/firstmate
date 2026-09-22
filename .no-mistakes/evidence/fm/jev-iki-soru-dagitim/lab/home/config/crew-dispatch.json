@@ -1,0 +1,1 @@
+{"rules":[{"when":"Unattended automation","strongest_reasoning":true,"confidence_floor":0.3,"use":[{"harness":"codex","model":"gpt-5.5","effort":"xhigh"}]},{"when":"Simple fact reporting or reading","use":[{"harness":"codex","model":"gpt-5.5","effort":"low"}]}]}

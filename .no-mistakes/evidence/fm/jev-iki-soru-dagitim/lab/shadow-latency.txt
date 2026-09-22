@@ -1,0 +1,38 @@
+===== H4 (threaded server) stakes answer takes 4s -> live answer not delayed
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: 0.8
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'low'
+exit=0
+wall_ms=391
+sh2.sh: line 4: /Users/xphoid/.no-mistakes/evidence/01M33V1SAN31J0DJPB4W4ZSRFM/lab/home/state/dispatch-stakes-shadow.jsonl: No such file or directory
+records immediately after live exit: 0
+===== H5 (threaded server) invalid stakes answer -> routing unchanged
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: 0.8
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'low'
+exit=0
+wall_ms=398
+===== H6 stakes hangs past the 5s curl bound -> live unaffected, recorded as transport error
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: 0.8
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'low'
+exit=0
+wall_ms=416
+{"stakes":{"status":"error","answer":null,"probabilities":null,"confidence":null,"error":"invalid_response"},"live":{"rule":"rule_2","confidence":0.8,"profile":{"harness":"codex","model":"gpt-5.5","effort":"low"}}}
+{"stakes":{"status":"ok","answer":"stakes_required","probabilities":{"not_required":0.03,"stakes_required":0.93,"unclear":0.04},"confidence":0.93,"error":null},"live":{"rule":"rule_2","confidence":0.8,"profile":{"harness":"codex","model":"gpt-5.5","effort":"low"}}}
+{"stakes":{"status":"error","answer":null,"probabilities":null,"confidence":null,"error":"transport"},"live":{"rule":"rule_2","confidence":0.8,"profile":{"harness":"codex","model":"gpt-5.5","effort":"low"}}}

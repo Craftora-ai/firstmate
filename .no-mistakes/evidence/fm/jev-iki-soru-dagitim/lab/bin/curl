@@ -1,0 +1,5 @@
+#!/bin/bash
+# Redirect the TypeSafe endpoint to the local lab server; everything else is real curl.
+args=()
+for a in "$@"; do args+=("${a//https:\/\/api.typesafe.ai/http://127.0.0.1:18777}"); done
+exec /usr/bin/curl "${args[@]}"

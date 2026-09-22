@@ -1,0 +1,33 @@
+===== S5b strongest rule (declared, floor 0.3) with NO confidence -> moves up (clear)
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (Unattended automation that writes into the vault or sends so)   confidence: null
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'xhigh'
+exit=0
+wall_ms=893
+===== S6b weaker rule with NO confidence -> ambiguous
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: null
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  reason: confidence missing; floor 0.6 not cleared
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=443
+===== S5c strongest declaration WITHOUT lowered floor + NO confidence -> no waiver
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (Unattended automation)   confidence: null
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  reason: confidence missing; floor 0.6 not cleared
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=421

@@ -1,0 +1,88 @@
+===== S1 strongest-class rule (declared, floor 0.3) matched at 0.35 -> moves UP
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (Unattended automation that writes into the vault or sends so)   confidence: 0.35
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  note: rule matched
+  candidate: claude:opus  provider=claude  scope=all_models  remaining=20%  spendPriority=-0.4943  runway=projected_exhaustion  -> eligible
+  profile: --harness 'claude' --model 'opus' --effort 'high'
+exit=0
+wall_ms=4105
+===== S2 weaker rule (no declaration, global floor) matched at 0.35 -> refused
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: 0.35
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  reason: confidence 0.35 below floor 0.6
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9978  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=3605
+===== S3 weaker rule at 0.59 (17-Sept case) -> refused
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: 0.59
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  reason: confidence 0.59 below floor 0.6
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9978  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=3600
+===== S4 weaker rule at 0.65 -> clears
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: 0.65
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9977  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'medium'
+exit=0
+wall_ms=3761
+===== S5 strongest rule with NO confidence -> may move up
+dispatch-resolve:
+  status: escalate
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (Unattended automation that writes into the vault or sends so)   confidence: null
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  reason: no rankable eligible candidate
+  note: rule matched
+  candidate: claude:opus  provider=claude  scope=all_models  remaining=-%  spendPriority=-  runway=unknown  -> eligible, unranked: provider claude unmeasured (unknown): disclosed uncertainty
+exit=0
+wall_ms=4999
+===== S6 weaker rule with NO confidence -> never moves down
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_2 (Simple fact reporting or reading)   confidence: null
+  probabilities: rule_1=0.3 rule_2=0.62 default=0.08
+  reason: confidence missing; floor 0.6 not cleared
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9977  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=3592
+===== S7 default match with NO confidence -> no waiver
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: default (No listed rule applies to this task.)   confidence: null
+  probabilities: rule_1=0.1 rule_2=0.1 default=0.8
+  reason: confidence missing; floor 0.6 not cleared
+  note: no rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9975  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=4093
+===== S8 strongest rule below its own 0.3 floor -> refused
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (Unattended automation that writes into the vault or sends so)   confidence: 0.29
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  reason: confidence 0.29 below floor 0.3
+  note: rule matched
+  candidate: claude:opus  provider=claude  scope=all_models  remaining=-%  spendPriority=-  runway=unknown  -> eligible, unranked: provider claude unmeasured (unknown): disclosed uncertainty
+exit=0
+wall_ms=4075

@@ -1,0 +1,3 @@
+#!/bin/bash
+# Serves one snapshot recorded from the real quota-axi --json earlier in this run.
+cat /Users/xphoid/.no-mistakes/evidence/01M33V1SAN31J0DJPB4W4ZSRFM/lab/quota-snapshot.json

@@ -1,0 +1,11 @@
+===== S5 (re-run) strongest rule with NO confidence -> may move up
+dispatch-resolve:
+  status: escalate
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (Unattended automation that writes into the vault or sends so)   confidence: null
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  reason: no rankable eligible candidate
+  note: rule matched
+  candidate: claude:opus  provider=claude  scope=all_models  remaining=-%  spendPriority=-  runway=unknown  -> eligible, unranked: provider claude unmeasured (unknown): disclosed uncertainty
+exit=0
+wall_ms=3570

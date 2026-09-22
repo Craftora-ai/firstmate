@@ -1,0 +1,57 @@
+===== C1 below-default floor (0.3) WITHOUT strongest_reasoning -> refused as malformed
+error: malformed rules file: /Users/xphoid/.no-mistakes/evidence/01M33V1SAN31J0DJPB4W4ZSRFM/lab/home/config/crew-dispatch.json - rule confidence_floor below 0.6 requires strongest_reasoning: true
+exit=2
+wall_ms=132
+===== C2 two strongest_reasoning rules naming DIFFERENT profile sets -> refused
+error: malformed rules file: /Users/xphoid/.no-mistakes/evidence/01M33V1SAN31J0DJPB4W4ZSRFM/lab/home/config/crew-dispatch.json - every strongest_reasoning rule must use the same profile set
+exit=2
+wall_ms=140
+===== C3 two strongest_reasoning rules naming the SAME set -> accepted
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (A)   confidence: 0.95
+  probabilities: rule_1=0.62 rule_2=0.3 default=0.08
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'xhigh'
+exit=0
+wall_ms=407
+===== C4 strongest_reasoning as string -> refused
+error: malformed rules file: /Users/xphoid/.no-mistakes/evidence/01M33V1SAN31J0DJPB4W4ZSRFM/lab/home/config/crew-dispatch.json - rule strongest_reasoning must be a boolean
+exit=2
+wall_ms=163
+===== C5 confidence_floor as numeric string -> refused
+error: malformed rules file: /Users/xphoid/.no-mistakes/evidence/01M33V1SAN31J0DJPB4W4ZSRFM/lab/home/config/crew-dispatch.json - rule confidence_floor must be a number 0..1
+exit=2
+wall_ms=151
+===== C6 raised floor 0.8 without declaration -> legal
+dispatch-resolve: error (response is not a rule Choice answer)
+dispatch-resolve:
+  status: error
+  reason: response is not a rule Choice answer
+exit=0
+wall_ms=319
+shadow records written by refused configs:        1
+===== C6 raised floor 0.8 without declaration -> legal; 0.7 refused by the raised floor
+dispatch-resolve:
+  status: ambiguous
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (A)   confidence: 0.7
+  probabilities: rule_1=0.9 default=0.1
+  reason: confidence 0.7 below floor 0.8
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+exit=0
+wall_ms=399
+===== C6' raised floor 0.8, confidence 0.85 -> clear
+dispatch-resolve:
+  status: clear
+  model: jev-latest   latency_ms: 0   tokens: 100/3
+  rule: rule_1 (A)   confidence: 0.85
+  probabilities: rule_1=0.9 default=0.1
+  note: rule matched
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=39%  spendPriority=-0.9973  runway=projected_exhaustion  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'low'
+exit=0
+wall_ms=417

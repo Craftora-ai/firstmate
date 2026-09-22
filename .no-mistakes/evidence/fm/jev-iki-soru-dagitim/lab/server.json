@@ -1,0 +1,26 @@
+{
+  "rule": {
+    "type": "choice",
+    "choice": "rule_2",
+    "confidence": 0.8,
+    "probabilities": {
+      "rule_1": 0.3,
+      "rule_2": 0.62,
+      "default": 0.08
+    }
+  },
+  "stakes": {
+    "answer": {
+      "type": "choice",
+      "choice": "stakes_required",
+      "confidence": 0.93,
+      "probabilities": {
+        "not_required": 0.03,
+        "stakes_required": 0.93,
+        "unclear": 0.04
+      }
+    },
+    "http": 200,
+    "delay": 8
+  }
+}

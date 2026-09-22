@@ -1,0 +1,422 @@
+{
+  "generatedAt": "2026-09-22T06:38:35.476Z",
+  "schemaVersion": 5,
+  "providers": [
+    {
+      "provider": "claude",
+      "plan": "max",
+      "windows": [
+        {
+          "id": "five_hour",
+          "label": "session",
+          "kind": "session",
+          "percentRemaining": 96,
+          "resetsAt": "2026-09-22T10:20:01.003552+00:00",
+          "pace": {
+            "status": "unknown",
+            "reason": "stale"
+          }
+        },
+        {
+          "id": "seven_day",
+          "label": "week",
+          "kind": "weekly",
+          "percentRemaining": 20,
+          "resetsAt": "2026-09-24T12:00:01.003572+00:00",
+          "pace": {
+            "status": "unknown",
+            "reason": "stale"
+          }
+        },
+        {
+          "id": "model:fable",
+          "label": "Fable week",
+          "kind": "model",
+          "percentRemaining": 5,
+          "resetsAt": "2026-09-24T12:00:00.003718+00:00",
+          "pace": {
+            "status": "unknown",
+            "reason": "stale"
+          }
+        }
+      ],
+      "state": {
+        "status": "stale",
+        "stale": true,
+        "error": "Claude quota endpoint rate limited",
+        "retryAfter": "2026-09-22T06:42:57.862Z"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": [
+          {
+            "scope": "all_models",
+            "status": "unknown",
+            "boundedBy": [
+              "five_hour",
+              "seven_day"
+            ],
+            "runway": {
+              "status": "unknown",
+              "unmeasurableWindowIds": [
+                "five_hour",
+                "seven_day"
+              ]
+            },
+            "selection": {
+              "status": "unknown",
+              "unmeasurableWindowIds": [
+                "five_hour",
+                "seven_day"
+              ]
+            },
+            "pace": {
+              "status": "unknown",
+              "unknownWindowIds": [
+                "five_hour",
+                "seven_day"
+              ]
+            }
+          },
+          {
+            "scope": "model:fable",
+            "status": "unknown",
+            "boundedBy": [
+              "five_hour",
+              "seven_day",
+              "model:fable"
+            ],
+            "runway": {
+              "status": "unknown",
+              "unmeasurableWindowIds": [
+                "five_hour",
+                "seven_day",
+                "model:fable"
+              ]
+            },
+            "selection": {
+              "status": "unknown",
+              "unmeasurableWindowIds": [
+                "five_hour",
+                "seven_day",
+                "model:fable"
+              ]
+            },
+            "pace": {
+              "status": "unknown",
+              "unknownWindowIds": [
+                "five_hour",
+                "seven_day",
+                "model:fable"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "provider": "codex",
+      "plan": "pro",
+      "windows": [
+        {
+          "id": "weekly",
+          "label": "week",
+          "kind": "weekly",
+          "resetsAt": "2026-09-26T15:28:30.000Z",
+          "percentRemaining": 39,
+          "pace": {
+            "status": "ahead",
+            "reservePercentPoints": -23.3999,
+            "burnMultiple": 1.6223
+          }
+        },
+        {
+          "id": "model:base_model_inference:7d",
+          "label": "gpt-reserve week",
+          "kind": "model",
+          "resetsAt": "2026-09-29T06:38:36.000Z",
+          "percentRemaining": 100,
+          "pace": {
+            "status": "unknown",
+            "reason": "future_cycle_start"
+          }
+        }
+      ],
+      "credits": {
+        "remaining": 0,
+        "unlimited": false,
+        "unit": "credits"
+      },
+      "state": {
+        "status": "fresh",
+        "stale": false
+      },
+      "quotaSemantics": {
+        "status": "known",
+        "effectiveAvailability": [
+          {
+            "scope": "all_models",
+            "status": "known",
+            "effectivePercentRemaining": 39,
+            "boundedBy": [
+              "weekly"
+            ],
+            "limitingWindowIds": [
+              "weekly"
+            ],
+            "pace": {
+              "status": "ahead",
+              "aheadWindowIds": [
+                "weekly"
+              ],
+              "worstReservePercentPoints": -23.3999,
+              "worstReserveWindowId": "weekly"
+            },
+            "runway": {
+              "status": "projected_exhaustion",
+              "usableRunwaySeconds": 145390,
+              "projectedExhaustedAt": "2026-09-23T23:01:45.862Z",
+              "limitingWindowId": "weekly",
+              "projectionConfidence": "established"
+            },
+            "selection": {
+              "status": "known",
+              "spendPriority": -0.9973
+            }
+          },
+          {
+            "scope": "model:base_model_inference",
+            "status": "known",
+            "effectivePercentRemaining": 39,
+            "boundedBy": [
+              "weekly",
+              "model:base_model_inference:7d"
+            ],
+            "limitingWindowIds": [
+              "weekly"
+            ],
+            "pace": {
+              "status": "ahead",
+              "aheadWindowIds": [
+                "weekly"
+              ],
+              "unknownWindowIds": [
+                "model:base_model_inference:7d"
+              ],
+              "worstReservePercentPoints": -23.3999,
+              "worstReserveWindowId": "weekly"
+            },
+            "runway": {
+              "status": "projected_exhaustion",
+              "usableRunwaySeconds": 145390,
+              "projectedExhaustedAt": "2026-09-23T23:01:45.862Z",
+              "limitingWindowId": "weekly",
+              "projectionConfidence": "established"
+            },
+            "selection": {
+              "status": "unknown",
+              "unmeasurableWindowIds": [
+                "model:base_model_inference:7d"
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "provider": "cursor",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "Cursor sign-in required"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "copilot",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "GitHub Copilot sign-in required"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": [],
+        "unresolvedWindowIds": []
+      }
+    },
+    {
+      "provider": "grok",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "Grok sign-in required",
+        "authStatus": "unusable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "kimi",
+      "windows": [],
+      "state": {
+        "status": "unavailable",
+        "stale": false,
+        "error": "pi_kimi_credential_expired",
+        "authStatus": "expired_refreshable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "zai",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "zai_credential_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "agy",
+      "windows": [],
+      "state": {
+        "status": "error",
+        "stale": false,
+        "error": "Antigravity CLI /quota failed"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "alibaba",
+      "windows": [],
+      "state": {
+        "status": "unavailable",
+        "stale": false,
+        "error": "bl_cli_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "opencode-go",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "opencode_go_credential_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "partial",
+        "effectiveAvailability": [],
+        "unresolvedWindowIds": [
+          "rolling",
+          "weekly",
+          "monthly"
+        ]
+      }
+    },
+    {
+      "provider": "commandcode",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "commandcode_sign_in_required",
+        "authStatus": "unusable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "minimax",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "minimax_credential_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    },
+    {
+      "provider": "mimo",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "mimo_credential_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": [],
+        "unresolvedWindowIds": []
+      }
+    },
+    {
+      "provider": "deepseek",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "deepseek_credential_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": [],
+        "unresolvedWindowIds": []
+      }
+    },
+    {
+      "provider": "openrouter",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "openrouter_credential_unavailable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": [],
+        "unresolvedWindowIds": []
+      }
+    },
+    {
+      "provider": "elevenlabs",
+      "windows": [],
+      "state": {
+        "status": "auth_required",
+        "stale": false,
+        "error": "elevenlabs_credential_unavailable",
+        "authStatus": "unusable"
+      },
+      "quotaSemantics": {
+        "status": "unknown",
+        "effectiveAvailability": []
+      }
+    }
+  ]
+}
