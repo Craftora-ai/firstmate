@@ -1063,6 +1063,7 @@ for bad in \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":0.3,"strongest_reasoning":false}]}|rule confidence_floor below 0.6 requires strongest_reasoning: true' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":"true"}]}|rule strongest_reasoning must be a boolean' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":null}]}|rule strongest_reasoning must be a boolean' \
+  '{"rules":[{"when":"x","use":{"harness":"claude"},"strongest_reasoning":true},{"when":"y","use":{"harness":"codex"},"strongest_reasoning":true,"confidence_floor":0.3}]}|every strongest_reasoning rule must use the same profile set' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":"0.3"}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":null}]}|rule confidence_floor must be a number 0..1' \
   '{"rules":[{"when":"x","use":{"harness":"claude"},"confidence_floor":-0.1}]}|rule confidence_floor must be a number 0..1' \

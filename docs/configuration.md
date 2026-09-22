@@ -491,6 +491,7 @@ Omitting it preserves the global floor of 0.6, owned once by `FM_DISPATCH_CONFID
 It is independent of the quota `floor`; null, strings (including numeric strings), and out-of-range values are configuration errors.
 A rule's optional boolean `strongest_reasoning: true` declares that its entire `use` set belongs to the strongest reasoning class in this configuration.
 False or omission makes no declaration; null and nonboolean values are configuration errors.
+The strongest reasoning class is singular: every rule that declares `strongest_reasoning: true` must use the same profile set, and declarations naming different sets are refused as malformed configuration.
 Only a rule that declares itself the strongest reasoning class may set its `confidence_floor` below the global default; a lower floor without that declaration is refused as malformed configuration, never clamped or silently honored.
 Floors at or above the global default remain legal for every rule, and the declaration alone does not reduce a numeric floor.
 Both declarations are per-rule only: the top-level `default` set carries neither, so an operator whose strongest reasoning class genuinely is the fallback expresses it as a catch-all rule rather than by declaring the default set.

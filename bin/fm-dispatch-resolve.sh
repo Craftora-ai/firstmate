@@ -196,6 +196,7 @@ rules_err=$(jq -r --argjson confidence_floor "$FM_DISPATCH_CONFIDENCE_FLOOR" --a
   elif any((.rules // [])[]; has("approval") and .approval != "captain") then "approval must be \"captain\" when present"
   elif any((.rules // [])[]; has("confidence_floor") and ((.confidence_floor | type) != "number" or .confidence_floor < 0 or .confidence_floor > 1)) then "rule confidence_floor must be a number 0..1"
   elif any((.rules // [])[]; has("strongest_reasoning") and (.strongest_reasoning | type) != "boolean") then "rule strongest_reasoning must be a boolean"
+  elif ([(.rules // [])[] | select(.strongest_reasoning == true) | profiles(.use) | sort] | unique | length) > 1 then "every strongest_reasoning rule must use the same profile set"
   elif any((.rules // [])[]; has("confidence_floor") and .confidence_floor < $confidence_floor and .strongest_reasoning != true) then "rule confidence_floor below \($confidence_floor) requires strongest_reasoning: true"
   elif any((.rules // [])[]; has("select") and ((.select | type) != "string" or (.select | length) == 0)) then "select must be a non-empty string"
   elif any((.rules // [])[]; has("select") and .select != "quota-balanced") then
