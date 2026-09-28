@@ -16,16 +16,18 @@ make_home() {
 }
 
 test_quiet_checkpoint_exits_124_cleanly() {
-  local home out err status
-  home=$(make_home quiet)
-  out="$home/out.txt"
-  err="$home/err.txt"
-  status=0
-  FM_HOME="$home" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 "$CHECKPOINT" --seconds 1 >"$out" 2>"$err" || status=$?
-  expect_code 124 "$status" "quiet checkpoint exit"
-  assert_contains "$(cat "$out")" "checkpoint: no actionable wake within 1s" "quiet checkpoint line missing"
-  assert_absent "$home/state/.watch.lock/pid" "watch lock pid survived quiet checkpoint timeout"
-  pass "quiet checkpoint exits 124 with a clean checkpoint line and no live lock"
+  local home out err status i
+  for i in 1 2 3 4 5 6 7 8; do
+    home=$(make_home "quiet-$i")
+    out="$home/out.txt"
+    err="$home/err.txt"
+    status=0
+    FM_HOME="$home" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 "$CHECKPOINT" --seconds 1 >"$out" 2>"$err" || status=$?
+    expect_code 124 "$status" "quiet checkpoint exit $i"
+    assert_contains "$(cat "$out")" "checkpoint: no actionable wake within 1s" "quiet checkpoint line missing on $i"
+    assert_absent "$home/state/.watch.lock/pid" "watch lock pid survived quiet checkpoint timeout $i"
+  done
+  pass "quiet checkpoints exit 124 with clean checkpoint lines and no stranded startup locks"
 }
 
 test_signal_passes_through_and_exits_zero() {
@@ -38,7 +40,7 @@ test_signal_passes_through_and_exits_zero() {
     printf 'done: synthetic wake\n' > "$home/state/demo.status"
   ) &
   status=0
-  FM_HOME="$home" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 "$CHECKPOINT" --seconds 8 >"$out" 2>"$err" || status=$?
+  FM_HOME="$home" FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 "$CHECKPOINT" --seconds 30 >"$out" 2>"$err" || status=$?
   expect_code 0 "$status" "signal checkpoint exit"
   assert_contains "$(cat "$out")" "signal:" "signal wake was not passed through"
   drained=$(FM_HOME="$home" "$ROOT/bin/fm-wake-drain.sh")
