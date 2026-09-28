@@ -801,7 +801,7 @@ Project trust also lives in that directory: its `config.toml` `[projects]` trust
 Firstmate reads the setting on each launch and assigns `CODEX_HOME` directly to the Codex process, including when the worker environment allowlist is enabled.
 The setting takes precedence over the pane's ambient `CODEX_HOME` and does not depend on an interactive-shell function.
 An absent file preserves existing launches and environment inheritance; other harnesses receive no Codex assignment.
-Malformed or inaccessible settings refuse the spawn before any endpoint, worktree, or task record is created; [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the exact file parsing and directory validation.
+Malformed or inaccessible settings refuse Codex launches before any endpoint, worktree, or task record is created, and never refuse launches on other harnesses; [`fm-spawn.sh --help`](../bin/fm-spawn.sh) owns the exact file parsing and directory validation.
 The path is machine-local and is not propagated into secondmate homes; configure each home that launches Codex workers on its own machine.
 Existing processes keep their configuration directory until relaunched.
 

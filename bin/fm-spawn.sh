@@ -308,7 +308,8 @@
 #   Optional readable regular file containing one absolute path to an existing
 #   readable directory, with an optional final newline. Spaces and shell
 #   metacharacters are literal; control characters, relative paths, empty files,
-#   and missing directories refuse the spawn before any mutation. Read on every
+#   and missing directories refuse a Codex spawn before endpoint or worktree
+#   creation; other harnesses never read the file. Read on every Codex
 #   spawn/relaunch. Codex launches alone receive a quoted CODEX_HOME assignment
 #   inside any launch-env-allowlist filter, independent of pane shell startup or
 #   daemon environment. An absent file preserves the existing launch behavior.
@@ -546,30 +547,6 @@ if [ "$LAUNCH_ENV_ENABLED" = 1 ]; then
     else error("expected environment names only") end
   ' "$CONFIG/launch-env-allowlist" 2>/dev/null); then
     echo "error: config/launch-env-allowlist must contain one environment name per line, blank lines, or # comments" >&2
-    exit 1
-  fi
-fi
-# Resolve the home-local Codex directory before endpoint/worktree creation.
-# Never evaluate its contents as shell syntax or expand ~ and variable names.
-CODEX_CONFIG_HOME=
-if ! CODEX_HOME_PRESENT=$(fm_config_source_present "$CONFIG/codex-home"); then
-  exit 1
-fi
-if [ "$CODEX_HOME_PRESENT" = 1 ]; then
-  if [ ! -f "$CONFIG/codex-home" ] || [ ! -r "$CONFIG/codex-home" ]; then
-    echo "error: config/codex-home must be a readable regular file containing one absolute directory path" >&2
-    exit 1
-  fi
-  if ! CODEX_CONFIG_HOME=$(jq -erRs '
-    sub("\n$"; "") |
-    if startswith("/") and (test("[\u0000-\u001f\u007f]") | not) then .
-    else error("expected one absolute directory path") end
-  ' "$CONFIG/codex-home" 2>/dev/null); then
-    echo "error: config/codex-home must contain one absolute directory path without control characters" >&2
-    exit 1
-  fi
-  if [ ! -d "$CODEX_CONFIG_HOME" ] || [ ! -r "$CODEX_CONFIG_HOME" ] || [ ! -x "$CODEX_CONFIG_HOME" ]; then
-    echo "error: config/codex-home must name an existing readable, searchable directory: $CODEX_CONFIG_HOME" >&2
     exit 1
   fi
 fi
@@ -2308,7 +2285,34 @@ if [ "$KIND" = secondmate ] && [ "$HARNESS" = rovo ]; then
   exit 1
 fi
 
+CODEX_CONFIG_HOME=
 case "$HARNESS" in
+codex)
+  # config/codex-home (header above) matters only to Codex launches, so a
+  # broken setting never refuses another harness. Never evaluate its contents
+  # as shell syntax or expand ~ and variable names.
+  if ! CODEX_HOME_PRESENT=$(fm_config_source_present "$CONFIG/codex-home"); then
+    exit 1
+  fi
+  if [ "$CODEX_HOME_PRESENT" = 1 ]; then
+    if [ ! -f "$CONFIG/codex-home" ] || [ ! -r "$CONFIG/codex-home" ]; then
+      echo "error: config/codex-home must be a readable regular file containing one absolute directory path" >&2
+      exit 1
+    fi
+    if ! CODEX_CONFIG_HOME=$(jq -erRs '
+      sub("\n$"; "") |
+      if startswith("/") and (test("[\u0000-\u001f\u007f]") | not) then .
+      else error("expected one absolute directory path") end
+    ' "$CONFIG/codex-home" 2>/dev/null); then
+      echo "error: config/codex-home must contain one absolute directory path without control characters" >&2
+      exit 1
+    fi
+    if [ ! -d "$CODEX_CONFIG_HOME" ] || [ ! -r "$CODEX_CONFIG_HOME" ] || [ ! -x "$CODEX_CONFIG_HOME" ]; then
+      echo "error: config/codex-home must name an existing readable, searchable directory: $CODEX_CONFIG_HOME" >&2
+      exit 1
+    fi
+  fi
+  ;;
 devin)
   DEVIN_BIN=$(command -v devin) || {
     echo "error: devin executable not found on PATH" >&2
@@ -5150,7 +5154,7 @@ if [ -n "$WORKER_ACCOUNT" ]; then
 elif [ "$HARNESS" = claude ] && [ -n "${CLAUDE_CONFIG_DIR:-}" ]; then
   LAUNCH="CLAUDE_CONFIG_DIR=$(shell_quote "$CLAUDE_CONFIG_DIR") $LAUNCH"
 fi
-if [ "$HARNESS" = codex ] && [ "$CODEX_HOME_PRESENT" = 1 ]; then
+if [ -n "$CODEX_CONFIG_HOME" ]; then
   LAUNCH="CODEX_HOME=$(shell_quote "$CODEX_CONFIG_HOME") $LAUNCH"
 fi
 if [ "$KIND" = secondmate ]; then

@@ -1915,10 +1915,33 @@ test_invalid_codex_home_refuses_before_endpoint_or_metadata() {
   pass "invalid Codex directory settings refuse before launch or metadata"
 }
 
+test_invalid_codex_home_does_not_refuse_other_harnesses() {
+  local harness variant id rec out status
+  for harness in claude pi; do
+    for variant in relative missing-directory directory; do
+      id="codex-home-broken-$harness-$variant"
+      rec=$(make_spawn_case "$id" "$harness" "$id")
+      read_case_record "$rec"
+      case "$variant" in
+        relative) printf 'relative/codex-firstmate\n' > "$HOME_DIR/config/codex-home" ;;
+        missing-directory) printf '%s\n' "$CASE_DIR/missing" > "$HOME_DIR/config/codex-home" ;;
+        directory) mkdir "$HOME_DIR/config/codex-home" ;;
+      esac
+      out=$(run_ship_spawn "$HOME_DIR" "$WT_DIR" "$FAKEBIN_DIR" "$LAUNCH_LOG" "$id" "$PROJ_DIR")
+      status=$?
+      expect_code 0 "$status" "$harness must launch despite a broken Codex home ($variant): $out"
+      [ -s "$LAUNCH_LOG" ] || fail "$harness did not launch with a broken Codex home ($variant)"
+      assert_grep "harness=$harness" "$HOME_DIR/state/$id.meta" "$harness spawn with a broken Codex home ($variant) wrote no task record"
+    done
+  done
+  pass "a broken Codex directory setting refuses Codex launches only"
+}
+
 test_codex_home_reaches_process_for_every_task_kind_and_filter
 test_absent_codex_home_preserves_the_destination_environment
 test_codex_home_does_not_change_other_harnesses
 test_invalid_codex_home_refuses_before_endpoint_or_metadata
+test_invalid_codex_home_does_not_refuse_other_harnesses
 
 test_worker_launch_delivers_role_scope
 test_no_profile_keeps_claude_profile_defaults
