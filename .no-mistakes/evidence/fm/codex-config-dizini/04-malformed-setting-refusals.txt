@@ -1,0 +1,43 @@
+### relative path
+config/codex-home content: relative/codex
+error: config/codex-home must contain one absolute directory path without control characters
+EXIT=1
+state/cx-bad.meta exists: no
+tmux windows: bash fm-cx-base fm-cx-home fm-cx-mcp 
+
+### missing directory
+config/codex-home content: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.7dlGjZ/does-not-exist
+error: config/codex-home must name an existing readable, searchable directory: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.7dlGjZ/does-not-exist
+EXIT=1
+state/cx-bad.meta exists: no
+tmux windows: bash fm-cx-base fm-cx-home fm-cx-mcp 
+
+### empty file
+config/codex-home content: 
+error: config/codex-home must contain one absolute directory path without control characters
+EXIT=1
+state/cx-bad.meta exists: no
+tmux windows: bash fm-cx-base fm-cx-home fm-cx-mcp 
+
+### two lines (control character)
+config/codex-home content: /tmp/a
+/tmp/b
+error: config/codex-home must contain one absolute directory path without control characters
+EXIT=1
+state/cx-bad.meta exists: no
+tmux windows: bash fm-cx-base fm-cx-home fm-cx-mcp 
+
+### config/codex-home is a directory
+config/codex-home content: 
+error: config/codex-home must be a readable regular file containing one absolute directory path
+EXIT=1
+state/cx-bad.meta exists: no
+tmux windows: bash fm-cx-base fm-cx-home fm-cx-mcp 
+
+### tilde path (not expanded)
+config/codex-home content: ~/.codex-alfred
+error: config/codex-home must contain one absolute directory path without control characters
+EXIT=1
+state/cx-bad.meta exists: no
+tmux windows: bash fm-cx-base fm-cx-home fm-cx-mcp 
+

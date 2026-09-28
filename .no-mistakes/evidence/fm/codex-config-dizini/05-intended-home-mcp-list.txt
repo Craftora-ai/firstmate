@@ -1,0 +1,7 @@
+# Supplementary (not through fm-spawn): MCP registrations visible in the intended home
+$ CODEX_HOME=/Users/xphoid/.codex-alfred codex mcp list  (names only)
+Name Command
+brave /Users/xphoid/alfred/config/mcp/brave/launch-brave-mcp.sh
+dfs-mcp /Users/xphoid/alfred/config/mcp/dfs/launch-dfs-mcp.sh
+exa /Users/xphoid/alfred/config/mcp/exa/launch-exa-mcp.sh
+firecrawl /Users/xphoid/alfred/config/mcp/firecrawl/launch-firecrawl-mcp.sh

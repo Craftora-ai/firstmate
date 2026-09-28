@@ -1,0 +1,34 @@
+# config/codex-home = /Users/xphoid/.codex-alfred
+fm-gate-refuse: gate agent lifecycle permitted only against lab home /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.7dlGjZ
+spawned cx-home harness=codex kind=scout window=primary:fm-cx-home worktree=/private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-lab.7dlGjZ/treehouse/.treehouse/repo-114519/2/repo
+EXIT=0
+
+## worker pane
+  Folder access
+  /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-lab.7dlGjZ/treehouse/.treehouse/repo-114519/2/repo
+  Note: You’re in a subdirectory of a Git project. Trusting will apply to the repository root:
+  /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-lab.7dlGjZ/repo
+  Trust this folder? Codex can read, edit, and run files here, subject to your permission settings. Folder settings can run code automatically, even without a model request. Continue only if you
+  trust these files. Your trust decision will be saved.
+› 1. Trust and continue
+  2. Quit
+  enter continue · esc quit
+
+## Codex-home files held open by the worker's codex process (pid 77044, lsof)
+/Users/xphoid/.codex-alfred/goals_1.sqlite
+/Users/xphoid/.codex-alfred/goals_1.sqlite-shm
+/Users/xphoid/.codex-alfred/goals_1.sqlite-wal
+/Users/xphoid/.codex-alfred/logs_2.sqlite
+/Users/xphoid/.codex-alfred/logs_2.sqlite-shm
+/Users/xphoid/.codex-alfred/logs_2.sqlite-wal
+/Users/xphoid/.codex-alfred/memories_1.sqlite
+/Users/xphoid/.codex-alfred/memories_1.sqlite-shm
+/Users/xphoid/.codex-alfred/memories_1.sqlite-wal
+/Users/xphoid/.codex-alfred/packages/standalone/releases/0.157.1-aarch64-apple-darwin/bin/codex
+/Users/xphoid/.codex-alfred/queue_1.sqlite
+/Users/xphoid/.codex-alfred/queue_1.sqlite-shm
+/Users/xphoid/.codex-alfred/queue_1.sqlite-wal
+/Users/xphoid/.codex-alfred/state_5.sqlite
+/Users/xphoid/.codex-alfred/state_5.sqlite-shm
+/Users/xphoid/.codex-alfred/state_5.sqlite-wal
+/Users/xphoid/.codex-alfred/tmp/arg0/codex-arg0a2gc6i/.lock
