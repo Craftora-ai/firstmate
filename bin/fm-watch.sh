@@ -33,7 +33,9 @@
 #                          applies does the log's latest recognized status event decide:
 #                          terminal (captain-relevant) or non-terminal (no verb),
 #                          both surfaced at once. A provably-working stale past the
-#                          wedge threshold also surfaces, with an "escalation N"
+#                          wedge threshold also surfaces unless a fresh crew-state
+#                          read proves the pane busy below its completed-turn bound,
+#                          with an "escalation N"
 #                          count in the reason; at FM_WEDGE_DEMAND_INSPECT_COUNT
 #                          consecutive escalations on the SAME pane, the reason
 #                          also carries a "demand-deep-inspection" marker so the
@@ -1511,6 +1513,16 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
       fm_epoch_seconds_to age
       age=$(( age - since ))
       if [ "$age" -ge "$STALE_ESCALATE_SECS" ]; then
+        # The first stale sighting and this threshold are separate samples. A
+        # pane that became busy between them must use the completed-turn bound,
+        # even if the earlier sample started a wedge timer. Keep a running
+        # run-step without pane-busy proof on the ordinary wedge schedule.
+        if crew_is_provably_busy_pane "$task" && ! busy_turn_over_age "$task"; then
+          rm -f "$since_file" "$escalation_file"
+          clear_write_tracking "$(window_key "$win")"
+          triage_log "absorbed $label (crew state confirms busy pane): $win"
+          return 0
+        fi
         if evidence=$(wedge_wait_evidence "$task") &&
            wedge_defer_wait "$win" "$since_file" "$label" "$age" "$evidence"; then
           return 0

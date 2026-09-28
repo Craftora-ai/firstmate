@@ -2400,6 +2400,49 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
   pass "provably-working non-terminal stale is absorbed on first sight, then wedge-escalated past the threshold"
 }
 
+test_stale_timer_rechecks_authoritative_pane_busy() {
+  local verdict source dir state fakebin out capture_file window key pane_hash sig pid
+  for verdict in pane run-step pane-over-age; do
+    dir=$(make_case "stale-timer-$verdict"); state="$dir/state"; fakebin="$dir/fakebin"
+    out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-timer-$verdict"
+    printf 'Working (14m 40s)\n' > "$capture_file"
+    printf 'window=%s\nkind=ship\nharness=codex\n' "$window" > "$state/timer-$verdict.meta"
+    printf 'working: running tests\n' > "$state/timer-$verdict.status"
+    sig=$(seen_sig "$state/timer-$verdict.status")
+    printf '%s' "$sig" > "$state/.seen-timer-$verdict"'_status'
+    key=$(printf '%s' "$window" | tr ':/.' '___')
+    pane_hash=$(hash_text "Working (14m 40s)")
+    printf '%s' "$pane_hash" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    printf '%s' "$pane_hash" > "$state/.stale-$key"
+    printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+    source=$verdict
+    if [ "$verdict" = pane-over-age ]; then
+      source=pane
+      touch -t 200001010000 "$state/timer-$verdict.meta"
+    fi
+    export FM_FAKE_CREW_STATE="state: working · source: $source · active"
+
+    watch_bg "$state" "$fakebin" "$out" env FM_FAKE_TMUX_WINDOW="$window" \
+      FM_FAKE_TMUX_CAPTURE="$capture_file" FM_STALE_ESCALATE_SECS=240
+    pid=$!
+    if [ "$verdict" = pane ]; then
+      if ! wait_poll_cycle "$state" "$pid"; then
+        reap "$pid"; fail "authoritatively busy pane was reported as wedged: $(cat "$out")"
+      fi
+      [ ! -s "$state/.wake-queue" ] || fail "busy pane enqueued a stale wake"
+      [ ! -e "$state/.stale-since-$key" ] || fail "busy pane kept the stale wedge timer"
+      reap "$pid"
+    else
+      wait_for_exit "$pid" 100 || fail "$verdict pane did not wedge-escalate"
+      grep -F 'possible wedge' "$out" >/dev/null \
+        || fail "$verdict pane lost its possible-wedge wake: $(cat "$out")"
+    fi
+  done
+  unset FM_FAKE_CREW_STATE
+  pass "stale timer trusts a busy pane below its turn bound while idle and over-age panes still escalate"
+}
+
 # --- non-terminal stale, crew NOT provably working: surfaced immediately ------
 # The key requirement: a crew with no running pipeline that has gone quiet (and is
 # not busy) has stopped - it may be done via interactive menus, waiting, or wedged.
@@ -6676,6 +6719,7 @@ test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
+test_stale_timer_rechecks_authoritative_pane_busy
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold
 test_wedge_escalation_resets_when_pane_becomes_active
 test_gone_endpoint_reports_once_instead_of_escalating_forever
