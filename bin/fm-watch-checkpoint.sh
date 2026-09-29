@@ -109,28 +109,6 @@ run_bounded() {  # <seconds> <command...>
   fi
 }
 
-# A timeout can kill the watcher during startup or during its EXIT cleanup.
-# Reconcile only this home's dead lock before reporting a quiet checkpoint; the
-# shared lock owner checks refuse to displace a live successor.
-reclaim_timed_out_watcher_lock() {
-  local lock="$STATE/.watch.lock" pid i=0
-  [ -e "$lock" ] || [ -L "$lock" ] || return 0
-  # shellcheck source=bin/fm-wake-lib.sh
-  . "$SCRIPT_DIR/fm-wake-lib.sh"
-  while [ "$i" -lt 30 ]; do
-    [ -e "$lock" ] || [ -L "$lock" ] || return 0
-    pid=$(cat "$lock/pid" 2>/dev/null || true)
-    if ! fm_pid_alive "$pid" && fm_lock_try_acquire "$lock"; then
-      fm_lock_release "$lock"
-      return 0
-    fi
-    sleep 0.1
-    i=$((i + 1))
-  done
-  echo "checkpoint: timed-out watcher lock did not clear safely" >&2
-  return 1
-}
-
 positive_or() {  # <value> <default>
   case "$1" in ''|0*|*[!0-9]*) printf '%s\n' "$2" ;; *) printf '%s\n' "$1" ;; esac
 }
@@ -193,7 +171,6 @@ if grep -E '^watcher: already running' "$OUT" "$ERR" >/dev/null 2>&1; then
 fi
 
 if [ "$RC" -eq 124 ]; then
-  reclaim_timed_out_watcher_lock || exit 1
   printf 'checkpoint: no actionable wake within %ss\n' "$SECONDS_ARG"
   exit 124
 fi

@@ -2392,19 +2392,6 @@ evict_stalled_holder() {
 EVICTED_PID=
 EVICTED_BEAT_AGE=
 BEAT="$STATE/.last-watcher-beat"
-# A bounded checkpoint can stop the watcher while it is still acquiring its
-# lock, before the full poll-loop cleanup below is installed. Own and release
-# that early lock on exit so a quiet checkpoint cannot strand a dead holder.
-watcher_startup_cleanup() {
-  [ "$(cat "$WATCH_LOCK/pid" 2>/dev/null || true)" = "${BASHPID:-$$}" ] || return 0
-  if ! fm_recovery_transition "$WATCHER_DOWNTIME_MARKER" release-lock "$WATCH_LOCK" \
-    downtime "$CLEANUP_LOCK_BOUND"; then
-    echo "watcher: recovery state could not be persisted; retaining stale lock evidence" >&2
-    return 1
-  fi
-}
-trap watcher_startup_cleanup EXIT
-watcher_stop_signals
 while ! fm_lock_try_acquire "$WATCH_LOCK"; do
   if [ -n "${FM_LOCK_HELD_PID:-}" ]; then
     if [ -e "$BEAT" ]; then
