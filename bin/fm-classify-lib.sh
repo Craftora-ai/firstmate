@@ -2460,20 +2460,6 @@ crew_is_provably_working() {  # <id>
   [ "$(crew_absorb_class "$1")" = working ]
 }
 
-# 0 iff the authoritative crew-state read attributes current work to a busy
-# pane. The watcher rechecks this at the wedge threshold when its earlier pane
-# sample was inconclusive. A running validation step alone does not satisfy it:
-# a static, idle pane during CI still needs the ordinary wedge timer.
-crew_is_provably_busy_pane() {  # <id>
-  local line
-  [ -n "$1" ] || return 1
-  line=$("$FM_CREW_STATE_BIN" "$1" 2>/dev/null) || return 1
-  case "$line" in
-    'state: working · source: pane · '*) return 0 ;;
-  esac
-  return 1
-}
-
 # 0 if crew <id>'s authoritative current state is a declared external-wait pause.
 # The stale path absorbs such a crew (on a long re-surface cadence) instead of
 # escalating a possible wedge.

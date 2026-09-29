@@ -2400,49 +2400,6 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
   pass "provably-working non-terminal stale is absorbed on first sight, then wedge-escalated past the threshold"
 }
 
-test_stale_timer_rechecks_authoritative_pane_busy() {
-  local verdict source dir state fakebin out capture_file window key pane_hash sig pid
-  for verdict in pane run-step pane-over-age; do
-    dir=$(make_case "stale-timer-$verdict"); state="$dir/state"; fakebin="$dir/fakebin"
-    out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-timer-$verdict"
-    printf 'Working (14m 40s)\n' > "$capture_file"
-    printf 'window=%s\nkind=ship\nharness=codex\n' "$window" > "$state/timer-$verdict.meta"
-    printf 'working: running tests\n' > "$state/timer-$verdict.status"
-    sig=$(seen_sig "$state/timer-$verdict.status")
-    printf '%s' "$sig" > "$state/.seen-timer-$verdict"'_status'
-    key=$(printf '%s' "$window" | tr ':/.' '___')
-    pane_hash=$(hash_text "Working (14m 40s)")
-    printf '%s' "$pane_hash" > "$state/.hash-$key"
-    printf '1\n' > "$state/.count-$key"
-    printf '%s' "$pane_hash" > "$state/.stale-$key"
-    printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
-    source=$verdict
-    if [ "$verdict" = pane-over-age ]; then
-      source=pane
-      touch -t 200001010000 "$state/timer-$verdict.meta"
-    fi
-    export FM_FAKE_CREW_STATE="state: working · source: $source · active"
-
-    watch_bg "$state" "$fakebin" "$out" env FM_FAKE_TMUX_WINDOW="$window" \
-      FM_FAKE_TMUX_CAPTURE="$capture_file" FM_STALE_ESCALATE_SECS=240
-    pid=$!
-    if [ "$verdict" = pane ]; then
-      if ! wait_poll_cycle "$state" "$pid"; then
-        reap "$pid"; fail "authoritatively busy pane was reported as wedged: $(cat "$out")"
-      fi
-      [ ! -s "$state/.wake-queue" ] || fail "busy pane enqueued a stale wake"
-      [ ! -e "$state/.stale-since-$key" ] || fail "busy pane kept the stale wedge timer"
-      reap "$pid"
-    else
-      wait_for_exit "$pid" 100 || fail "$verdict pane did not wedge-escalate"
-      grep -F 'possible wedge' "$out" >/dev/null \
-        || fail "$verdict pane lost its possible-wedge wake: $(cat "$out")"
-    fi
-  done
-  unset FM_FAKE_CREW_STATE
-  pass "stale timer trusts a busy pane below its turn bound while idle and over-age panes still escalate"
-}
-
 # --- non-terminal stale, crew NOT provably working: surfaced immediately ------
 # The key requirement: a crew with no running pipeline that has gone quiet (and is
 # not busy) has stopped - it may be done via interactive menus, waiting, or wedged.
@@ -3474,9 +3431,9 @@ working: still parked at that gate'
 # for it. Absent `config/wedge-defer-parked-gate` the lane this whole file
 # otherwise defers - human-owed gate, open decision keyed to that run, every
 # signal the armed cases assert on - must escalate on the unchanged schedule
-# with the unchanged reason and demand-deep-inspection wording, and the gate
-# evidence arm must not be reached: only the shared pane-busy threshold read is
-# spent and no recheck throttle is written. The fixture matches the armed case
+# with the unchanged reason and demand-deep-inspection wording, and the evidence
+# arm must not even be reached: no current-state read is spent and no recheck
+# throttle is written. The fixture is byte-identical to the armed case above
 # except for the flag, so the difference is attributable to the flag alone.
 test_wedge_threshold_parked_gate_is_off_until_armed() {
   local dir state fakebin out capture window key n unarmed_probes armed_probes
@@ -3509,11 +3466,13 @@ working: still parked at that gate'
   unarmed_probes=$(wc -l < "$FM_FAKE_CREW_STATE_LOG" | tr -d ' ')
   unset FM_FAKE_CREW_STATE_LOG
 
-  [ "$unarmed_probes" -eq 3 ] \
-    || fail "an unarmed home spent $unarmed_probes current-state read(s), expected one pane-busy check per threshold"
+  [ "$unarmed_probes" -eq 0 ] \
+    || fail "an unarmed home spent $unarmed_probes current-state read(s) on a parked gate over three thresholds"
 
   # The same fixture with only the flag added, counted the same way, so the
-  # armed threshold must spend a second read for the parked-gate decision.
+  # zero above is the flag's doing rather than a fixture that could never have
+  # reached the reader: one armed threshold must spend a read. A guard placed
+  # after the consult instead of before it would make both counts nonzero.
   dir=$(wedge_threshold_fixture parked-gate-armed-probe-count "$escalated" 2000)
   arm_parked_gate "$dir"
   state="$dir/state"; fakebin="$dir/fakebin"; out="$dir/watch.out"; capture="$dir/pane.txt"
@@ -3524,9 +3483,9 @@ working: still parked at that gate'
   ack_stopped_cycle "$state" || fail "could not acknowledge the armed control recheck"
   armed_probes=$(wc -l < "$FM_FAKE_CREW_STATE_LOG" | tr -d ' ')
   unset FM_FAKE_CREW_STATE_LOG
-  [ "$armed_probes" -eq 2 ] \
-    || fail "the armed control spent $armed_probes current-state read(s), expected pane-busy and gate checks"
-  pass "with config/wedge-defer-parked-gate absent a parked gate keeps its ladder without the gate-specific read"
+  [ "$armed_probes" -gt 0 ] \
+    || fail "the armed control spent no current-state read, so the probe count proves nothing"
+  pass "with config/wedge-defer-parked-gate absent a parked gate keeps the unchanged ladder, wording and reads"
 }
 
 # --- a parked human-owed gate also needs the human to still owe an answer ----
@@ -6717,7 +6676,6 @@ test_permission_recovery_surfaces_preserved_status
 test_terminal_stale_surfaced
 test_stale_terminal_status_overridden_by_active_run
 test_nonterminal_stale_provably_working_absorbed_then_escalated
-test_stale_timer_rechecks_authoritative_pane_busy
 test_wedge_escalation_marks_demand_deep_inspection_after_threshold
 test_wedge_escalation_resets_when_pane_becomes_active
 test_gone_endpoint_reports_once_instead_of_escalating_forever
