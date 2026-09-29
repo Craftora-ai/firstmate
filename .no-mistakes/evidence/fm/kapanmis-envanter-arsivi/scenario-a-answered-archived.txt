@@ -1,0 +1,42 @@
+## Scenario A: scout meta-plan-ozeti, answered calls archived by Done retention
+$ [target-b09c86e] fm-captain-hold.sh complete meta-plan-ozeti 09p-gorsel-uretim-2 compact-adviser-otomatik craftora-formlar-temizlik harun-sorulari-mesaji
+complete: meta-plan-ozeti captain-call inventory reviewed (09p-gorsel-uretim-2,compact-adviser-otomatik,craftora-formlar-temizlik,harun-sorulari-mesaji)
+[exit 0]
+decision_keys=09p-gorsel-uretim-2,compact-adviser-otomatik,craftora-formlar-temizlik,harun-sorulari-mesaji
+$ [target-b09c86e] fm-captain-hold.sh verify meta-plan-ozeti
+verified: meta-plan-ozeti captain-call inventory
+[exit 0]
+$ tasks-axi prune --keep 0
+ok: prune done -> archived 4 (kept 0)
+help[1]:
+  - Run `tasks-axi list --state done` to see retained Done items
+[exit 0]
+--- active backlog after retention:
+## In flight
+
+## Queued
+## Done
+--- archive excerpt (09p-gorsel-uretim-2):
+27:- [x] 09p-gorsel-uretim-2 - Captain call 09p-gorsel-uretim-2 (repo: sample) (kind: captain) (done 2026-09-29) (hold: captain choice pending) (hold-kind: captain)
+28-  Resolution recorded by fm-captain-hold.
+29-  Decision digest: 9a7fd00546915d6ef274f03a45c16759bae754a8c04360aa744d9dffd195bc99
+30-  Resolution mode: answered
+31-
+32-  Captain decision:
+33-  Captain says: go ahead with 09p-gorsel-uretim-2.
+34-
+--- BASE commit 46d58d6 (before fix):
+$ [base-46d58d6] fm-captain-hold.sh verify meta-plan-ozeti
+fm-captain-hold: no captain-held task 09p-gorsel-uretim-2 and no migrated hold for it in this home's configured backlog (data directory /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.2ikJAb/data); the nearest legacy identity meta-plan-ozeti-decision-09p-gorsel-uretim-2 also resolves to nothing
+[exit 1]
+$ [base-46d58d6] fm-captain-hold.sh complete meta-plan-ozeti 09p-gorsel-uretim-2 compact-adviser-otomatik craftora-formlar-temizlik harun-sorulari-mesaji
+fm-captain-hold: no captain-held task 09p-gorsel-uretim-2 and no migrated hold for it in this home's configured backlog (data directory /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.2ikJAb/data); the nearest legacy identity meta-plan-ozeti-decision-09p-gorsel-uretim-2 also resolves to nothing
+[exit 1]
+--- TARGET commit b09c86e (after fix):
+$ [target-b09c86e] fm-captain-hold.sh verify meta-plan-ozeti
+verified: meta-plan-ozeti captain-call inventory
+[exit 0]
+$ [target-b09c86e] fm-captain-hold.sh complete meta-plan-ozeti 09p-gorsel-uretim-2 compact-adviser-otomatik craftora-formlar-temizlik harun-sorulari-mesaji
+complete: meta-plan-ozeti captain-call inventory reviewed (09p-gorsel-uretim-2,compact-adviser-otomatik,craftora-formlar-temizlik,harun-sorulari-mesaji)
+[exit 0]
+backlog and archive unchanged by verify/complete: yes

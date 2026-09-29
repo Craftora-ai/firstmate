@@ -1,0 +1,50 @@
+## Scenario B: call closed WITHOUT a recorded answer, then archived -> must still refuse
+$ [target-b09c86e] fm-captain-hold.sh complete projects-silme-review projects-silme-onayi
+complete: projects-silme-review captain-call inventory reviewed (projects-silme-onayi)
+37:- [x] projects-silme-onayi - Delete projects? (repo: sample) (kind: captain) (done 2026-09-29) (hold: captain choice pending) (hold-kind: captain)
+38-  Captain hold set: 2026-09-29T10:15:03Z
+$ [target-b09c86e] fm-captain-hold.sh verify projects-silme-review
+fm-captain-hold: captain-held task projects-silme-onayi is neither held for the captain nor closed with a recorded captain answer
+$ [target-b09c86e] fm-captain-hold.sh complete projects-silme-review projects-silme-onayi
+fm-captain-hold: captain-held task projects-silme-onayi is neither held for the captain nor closed with a recorded captain answer
+
+## Scenario C: legacy <origin>-decision-<entry> identity (kespi-karar-panosu / kespi-pixar-test), answered then archived
+$ [target-b09c86e] fm-captain-hold.sh complete kespi-karar-panosu kespi-pixar-test
+complete: kespi-karar-panosu captain-call inventory reviewed (kespi-pixar-test)
+$ [base-46d58d6] fm-captain-hold.sh verify kespi-karar-panosu
+fm-captain-hold: no captain-held task kespi-pixar-test and no migrated hold for it in this home's configured backlog (data directory $LAB/data); the nearest legacy identity kespi-karar-panosu-decision-kespi-pixar-test also resolves to nothing
+$ [target-b09c86e] fm-captain-hold.sh verify kespi-karar-panosu
+verified: kespi-karar-panosu captain-call inventory
+$ [target-b09c86e] fm-captain-hold.sh complete kespi-karar-panosu kespi-pixar-test
+complete: kespi-karar-panosu captain-call inventory reviewed (kespi-pixar-test)
+
+## Scenario D: archived unrelated namesake 'choice' next to an ACTIVE legacy hold X-decision-choice -> active wins
+$ [target-b09c86e] fm-captain-hold.sh complete nsx choice
+complete: nsx captain-call inventory reviewed (choice)
+$ [target-b09c86e] fm-captain-hold.sh verify nsx
+verified: nsx captain-call inventory
+(reverse) archived ANSWERED namesake cannot vouch for an active exact row closed without answer:
+$ [target-b09c86e] fm-captain-hold.sh complete nsy pick
+fm-captain-hold: captain-held task pick is neither held for the captain nor closed with a recorded captain answer
+
+## Scenario E1: id archived twice (first closed unanswered, re-held and answered) -> newest row wins, passes
+archived rows for reheld-call: 2
+$ [target-b09c86e] fm-captain-hold.sh complete reheld-review reheld-call
+complete: reheld-review captain-call inventory reviewed (reheld-call)
+$ [target-b09c86e] fm-captain-hold.sh verify reheld-review
+verified: reheld-review captain-call inventory
+## Scenario E2: id archived twice (first answered, re-held then closed unanswered) -> newest row wins, refuses
+$ [target-b09c86e] fm-captain-hold.sh complete reheld2-review reheld2-call
+complete: reheld2-review captain-call inventory reviewed (reheld2-call)
+archived rows for reheld2-call: 2
+$ [target-b09c86e] fm-captain-hold.sh verify reheld2-review
+fm-captain-hold: captain-held task reheld2-call is neither held for the captain nor closed with a recorded captain answer
+
+## Exit codes (re-run of the read-only verify gate per scout, target b09c86e; base 46d58d6 for comparison)
+projects-silme-review  target=1 base=1
+kespi-karar-panosu     target=0 base=1
+nsx                    target=0 base=0
+nsy                    target=1 base=1
+reheld-review          target=0 base=1
+reheld2-review         target=1 base=1
+meta-plan-ozeti        target=0 base=1

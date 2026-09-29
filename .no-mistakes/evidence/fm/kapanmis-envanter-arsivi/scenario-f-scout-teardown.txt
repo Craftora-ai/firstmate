@@ -1,0 +1,35 @@
+## Scenario F: scout teardown gate after Done retention archived its answered calls
+--- base 46d58d6:
+$ [base-46d58d6] fm-teardown.sh meta-plan-ozeti
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  7 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+fm-captain-hold: no captain-held task 09p-gorsel-uretim-2 and no migrated hold for it in this home's configured backlog (data directory $LAB/data); the nearest legacy identity meta-plan-ozeti-decision-09p-gorsel-uretim-2 also resolves to nothing
+REFUSED: scout task meta-plan-ozeti has not passed the captain-call completion gate.
+Inventory its report and any visual review through bin/fm-captain-hold.sh before teardown.
+[exit 0]
+state/meta-plan-ozeti.meta still present: yes
+--- target b09c86e, unanswered archived call (must refuse):
+$ [target-b09c86e] fm-teardown.sh projects-silme-review
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+fm-captain-hold: captain-held task projects-silme-onayi is neither held for the captain nor closed with a recorded captain answer
+REFUSED: scout task projects-silme-review has not passed the captain-call completion gate.
+Inventory its report and any visual review through bin/fm-captain-hold.sh before teardown.
+[exit 0]
+state/projects-silme-review.meta still present: yes
+--- target b09c86e, answered archived calls (must pass the gate):
+$ [target-b09c86e] fm-teardown.sh meta-plan-ozeti
+fm-gate-refuse: gate agent lifecycle permitted only against lab home $LAB
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: meta-plan-ozeti's endpoint and local copy are cleaned up, but its backlog item could not be closed atomically (error: "Task \"meta-plan-ozeti\" not found in this backlog"); the pending close is recorded and the next session start retries it
+[exit 0]
+state/meta-plan-ozeti.meta present after teardown: no
+--- lab tmux windows after teardown:
+firstmate:0: fm-meta-plan-ozeti* (1 panes) [80x24] 
+firstmate:1: fm-projects-silme-review (1 panes) [80x24] 
