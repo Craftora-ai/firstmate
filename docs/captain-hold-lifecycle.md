@@ -102,7 +102,7 @@ A post-teardown visual review can complete against the surviving report and dura
 
 `complete` accepts `--none` as an explicit semantic inventory result.
 `--none` is refused while the origin still has a lifecycle-open keyed status decision.
-Before recording completion, `complete` verifies every listed task against tasks-axi.
+Before recording completion, `complete` verifies every listed task against the configured backlog, including answered Done rows moved to its retention archive.
 
 With a non-empty inventory, `complete` appends a `captain-held [key=<key>]` transfer event for every still-open keyed status decision.
 The event names the reviewed inventory.
@@ -513,7 +513,8 @@ The suite does not test the accepted merge-to-cleanup re-hold window or asynchro
 
 - A report-only unresolved captain call refuses `--none` completion before teardown can erase the source.
 - Non-forced scout teardown always requires the durable inventory verification.
-- The recorded-answer guard holds: a bare `tasks-axi done` close fails `verify` until `answer` records the captain's word, and an ordinary finished task cannot be dressed up as an answered call.
+- The recorded-answer guard holds before and after Done retention archives the row: answered inventories pass `complete` and `verify`, while a bare `tasks-axi done` close still refuses without a recorded answer.
+  An ordinary finished task cannot be dressed up as an answered call.
 
 ### Answers, stamps, and deferral
 

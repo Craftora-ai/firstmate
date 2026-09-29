@@ -873,6 +873,51 @@ test_answer_records_and_closes() {
   pass "answer records the captain's words, closes idempotently, and releases routed work"
 }
 
+# Retention moves answered calls out of the active backlog without invalidating
+# the scout's inventory. A closed row without an answer remains insufficient.
+test_completion_survives_done_archival() {
+  local fixture_home id call archive before
+  fixture_home=$(make_home archived-inventory)
+  id=sample-archived-review
+  call=sample-archived-call
+  archive="$fixture_home/data/done-archive.md"
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the archived option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold archive fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest archive fixture"
+  printf 'Choose the durable option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer archive fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not run Done retention"
+  assert_no_grep "$call" "$fixture_home/data/backlog.md" "retention left the call in the active backlog"
+  assert_grep 'Choose the durable option.' "$archive" "retention lost the recorded answer"
+  before=$(shasum -a 256 "$fixture_home/data/backlog.md" "$archive")
+  run_captain "$fixture_home" verify "$id" > "$fixture_home/verify.out" 2> "$fixture_home/verify.err" \
+    || fail "archiving an answered call broke verification: $(cat "$fixture_home/verify.err")"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null \
+    || fail "archiving an answered call broke repeated completion"
+  [ "$before" = "$(shasum -a 256 "$fixture_home/data/backlog.md" "$archive")" ] \
+    || fail "completion verification rewrote the backlog or archive"
+
+  call=sample-unanswered-archived-call
+  id=sample-unanswered-archived-review
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the unanswered option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold unanswered fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest unanswered fixture"
+  tasks_in "$fixture_home" 'done' "$call" --no-prune >/dev/null || fail "could not close unanswered fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive unanswered fixture"
+  assert_no_grep "$call" "$fixture_home/data/backlog.md" "unanswered call stayed in the backlog"
+  assert_grep "$call" "$archive" "unanswered call was not archived"
+  if run_captain "$fixture_home" verify "$id" > "$fixture_home/unanswered.out" 2> "$fixture_home/unanswered.err"; then
+    fail "verification accepted an archived call closed without a recorded answer"
+  fi
+  if run_captain "$fixture_home" complete "$id" "$call" > "$fixture_home/unanswered.out" 2> "$fixture_home/unanswered.err"; then
+    fail "completion accepted an archived call closed without a recorded answer"
+  fi
+  pass "Done retention preserves answered inventories and refuses unanswered archived calls"
+}
+
 # --release lifts the hold instead of closing, preserving the work item's own
 # body under the record; a re-held task later accepts a new answer.
 test_release_frees_held_work() {
@@ -4034,6 +4079,53 @@ test_retained_body_keeps_its_utf8_bytes() {
   pass "cleanup preserves every byte of a retained body's non-ASCII characters"
 }
 
+# A relocated data root owns its archive configuration, even when the caller's
+# FM_HOME has a different backlog. Legacy keys and exact active-row precedence
+# retain their meaning after archival.
+test_archived_inventory_uses_configured_root() (
+  fixture_home=$(make_home archived-decoy-home)
+  records=$(make_home archived-records-root)
+  id=sample-configured-review
+  call=$id-decision-choice
+  archive="$records/history/answered #calls.md"
+  printf '%s\n' 'backend = "markdown"' '[markdown]' \
+    'path = "data/backlog.md"' "archive = 'history/answered #calls.md' # retained answers" \
+    'done_keep = 10' > "$records/.tasks.toml"
+  write_origin_meta "$fixture_home" "$id"
+  export FM_HOME="$fixture_home" FM_STATE_OVERRIDE="$fixture_home/state" FM_DATA_OVERRIDE="$records/data"
+  export FM_CONFIG_OVERRIDE="$fixture_home/config" PATH="$fixture_home/fakebin:$PATH"
+  captain="$ROOT/bin/fm-captain-hold.sh"
+  "$captain" hold "$call" --title "Choose the configured option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold legacy archive fixture"
+  "$captain" complete "$id" choice >/dev/null || fail "could not attest legacy archive fixture"
+  printf 'Keep the configured option.\n' > "$fixture_home/answer.txt"
+  "$captain" answer "$call" --decision-file "$fixture_home/answer.txt" >/dev/null \
+    || fail "could not answer legacy archive fixture"
+  tasks_in "$records" prune --keep 0 >/dev/null || fail "could not archive configured fixture"
+  assert_grep "$call" "$archive" "retention missed the configured archive"
+  "$captain" verify "$id" >/dev/null || fail "verification missed the configured archive or legacy key"
+  "$captain" complete "$id" choice >/dev/null || fail "completion missed the configured archive or legacy key"
+
+  # An archive in FM_HOME cannot substitute for the configured root's archive.
+  mv "$archive" "$fixture_home/data/done-archive.md"
+  if "$captain" verify "$id" > "$fixture_home/absent.out" 2> "$fixture_home/absent.err"; then
+    fail "verification borrowed an answer from the wrong home's archive"
+  fi
+  mv "$fixture_home/data/done-archive.md" "$archive"
+
+  # An exact active id still wins over a historical derived identity.
+  tasks_in "$records" add choice "An unrelated completed task" --repo sample >/dev/null
+  tasks_in "$records" 'done' choice --no-prune >/dev/null
+  if "$captain" verify "$id" > "$fixture_home/namesake.out" 2> "$fixture_home/namesake.err"; then
+    fail "an archived answer masked an active exact id without a recorded answer"
+  fi
+  assert_grep 'neither held for the captain nor closed with a recorded captain answer' \
+    "$fixture_home/namesake.err" "active-row precedence failed for an unrelated reason"
+  pass "archived legacy inventory follows the configured data root and active exact-id precedence"
+)
+
+test_completion_survives_done_archival
+test_archived_inventory_uses_configured_root
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes
