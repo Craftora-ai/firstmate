@@ -4124,8 +4124,49 @@ test_archived_inventory_uses_configured_root() (
   pass "archived legacy inventory follows the configured data root and active exact-id precedence"
 )
 
+# An archived namesake never shadows an active legacy hold, and a call id
+# retained more than once reads its newest archived row.
+test_archived_resolution_prefers_active_and_newest() {
+  local fixture_home id call
+  fixture_home=$(make_home archived-precedence)
+  id=sample-precedence-review
+  write_origin_meta "$fixture_home" "$id"
+  tasks_in "$fixture_home" add choice "An unrelated finished task" --repo sample >/dev/null \
+    || fail "could not add namesake fixture"
+  tasks_in "$fixture_home" 'done' choice --no-prune >/dev/null || fail "could not close namesake fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive namesake fixture"
+  run_captain "$fixture_home" hold "$id-decision-choice" --title "Choose the legacy option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold legacy fixture"
+  run_captain "$fixture_home" complete "$id" choice > "$fixture_home/legacy.out" 2> "$fixture_home/legacy.err" \
+    || fail "an archived namesake shadowed the active legacy hold: $(cat "$fixture_home/legacy.err")"
+  run_captain "$fixture_home" verify "$id" > "$fixture_home/legacy.out" 2> "$fixture_home/legacy.err" \
+    || fail "an archived namesake shadowed the active legacy hold: $(cat "$fixture_home/legacy.err")"
+
+  id=sample-reheld-review
+  call=sample-reheld-call
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the first option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold first fixture"
+  tasks_in "$fixture_home" 'done' "$call" --no-prune >/dev/null || fail "could not close first fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive first fixture"
+  run_captain "$fixture_home" hold "$call" --title "Choose the second option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not re-hold fixture"
+  printf 'Choose the second option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer re-held fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive re-held fixture"
+  [ "$(grep -c "^- \[x\] $call - " "$fixture_home/data/done-archive.md")" = 2 ] \
+    || fail "the archive does not retain both rows of the re-held call"
+  run_captain "$fixture_home" complete "$id" "$call" > "$fixture_home/reheld.out" 2> "$fixture_home/reheld.err" \
+    || fail "a call retained twice could not complete: $(cat "$fixture_home/reheld.err")"
+  run_captain "$fixture_home" verify "$id" > "$fixture_home/reheld.out" 2> "$fixture_home/reheld.err" \
+    || fail "a call retained twice could not verify: $(cat "$fixture_home/reheld.err")"
+  pass "archived resolution prefers active rows and the newest retained row"
+}
+
 test_completion_survives_done_archival
 test_archived_inventory_uses_configured_root
+test_archived_resolution_prefers_active_and_newest
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes

@@ -369,7 +369,7 @@ require_tasks_axi() {
 # inside a command substitution can still tell a wedged backend from a
 # genuinely unknown id.
 TASK_SHOW_OUTPUT=
-task_show() {  # <id> [--include-archive]; sets TASK_SHOW_OUTPUT
+task_show() {  # <id>; sets TASK_SHOW_OUTPUT
   local data status=0 reason
   data=$(fm_backlog_data_absolute "$DATA") || fail "data directory cannot be resolved: $DATA"
   TASK_SHOW_OUTPUT=$(fm_backlog_row_show "$data" "$1" --full 2>/dev/null) || status=$?
@@ -379,11 +379,6 @@ task_show() {  # <id> [--include-archive]; sets TASK_SHOW_OUTPUT
       "${reason:-tasks-axi show $1 exceeded its backlog read bound}" >&2
     exit 124
   fi
-  if [ "$status" -ne 0 ] && [ "${2:-}" = --include-archive ] \
-    && printf '%s\n' "$TASK_SHOW_OUTPUT" | grep -q '^code: NOT_FOUND$'; then
-    archived_task_show "$data" "$1"
-    return $?
-  fi
   return "$status"
 }
 
@@ -391,9 +386,11 @@ task_show() {  # <id> [--include-archive]; sets TASK_SHOW_OUTPUT
 # sections only, so an archive's `## Archived <date>` blocks need this narrow
 # reader. Resolve the same project-over-user archive setting as tasks-axi,
 # relative to the backlog root; absent settings use the backlog's sibling.
-# Never use a stale markdown archive on a non-markdown backend.
-archived_task_show() {  # <resolved-data-dir> <id>; sets TASK_SHOW_OUTPUT
-  local data=$1 id=$2 root backend archive status=0
+# Never use a stale markdown archive on a non-markdown backend. An id retained
+# more than once reads its last, newest block.
+archived_task_show() {  # <id>; sets TASK_SHOW_OUTPUT
+  local id=$1 data root backend archive status=0
+  data=$(fm_backlog_data_absolute "$DATA") || fail "data directory cannot be resolved: $DATA"
   root=$(fm_backlog_root "$data") || fail "cannot resolve the backlog root for $id"
   backend=$(fm_tasks_axi_backend "$root") || exit 2
   [ "$backend" = markdown ] || return 1
@@ -437,7 +434,7 @@ archived_task_show() {  # <resolved-data-dir> <id>; sets TASK_SHOW_OUTPUT
       $line =~ s/\r?\n$//;
       if ($line =~ /^- \[x\] \Q$id\E - /) {
         ++$count;
-        $inside = 1;
+        ($inside, $body) = (1, "");
       } elsif ($inside && $line =~ /^  (.*)$/) {
         $body .= "$1\n";
       } elsif ($line =~ /\S/) {
@@ -446,7 +443,6 @@ archived_task_show() {  # <resolved-data-dir> <id>; sets TASK_SHOW_OUTPUT
     }
     close $fh or die "cannot close $path: $!\n";
     exit 1 unless $count;
-    die "ambiguous archived task $id in $path\n" if $count != 1;
     print "  state: done\n  hold_kind: \"-\"\n  body: ",
       encode_json(Encode::decode("UTF-8", $body, Encode::FB_CROAK)), "\n";
   ' "$archive" "$id") || status=$?
@@ -590,9 +586,13 @@ resolution_block() {  # <mode>
 
 # Durable state of one captain call: an active captain hold (annotations
 # surviving even when a date gate has expired) or a recorded captain answer.
-verify_hold_durable() {  # <task-id>
+verify_hold_durable() {  # <task-id> [<how>]
   local id=$1 show state hold_kind body
-  task_show "$id" --include-archive || fail "captain-held task $id is absent from this home's configured backlog (data directory $DATA)"
+  local how=${2:-}
+  case "$how" in
+    archived-*) archived_task_show "$id" ;;
+    *) task_show "$id" ;;
+  esac || fail "captain-held task $id is absent from this home's configured backlog (data directory $DATA)"
   show=$TASK_SHOW_OUTPUT
   state=$(show_field "$show" state)
   hold_kind=$(show_field_value "$show" hold_kind)
@@ -803,15 +803,18 @@ resolve_migrated_entry() {  # <origin-or-empty> <entry>
 # beads backend - the migrated row the markdown-to-beads hold migration wrote.
 # Prints "<resolved id> <how>", where <how> is exact, legacy, migrated-note or
 # migrated-prefix, so a caller can record which evidence carried the attestation.
+# With --include-archive, only when no active row resolves, the exact and then
+# the legacy identity are retried against the markdown retention archive as
+# archived-exact or archived-legacy.
 resolve_entry() {  # <origin-or-empty> <entry> [--include-archive]; prints "<id> <how>" or fails
   local origin=$1 entry=$2 legacy migrated rc
-  if task_show "$entry" "${3:-}"; then
+  if task_show "$entry"; then
     printf '%s exact' "$entry"
     return 0
   fi
   if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
     legacy=$(legacy_hold_id "$origin" "$entry")
-    if task_show "$legacy" "${3:-}"; then
+    if task_show "$legacy"; then
       printf '%s legacy' "$legacy"
       return 0
     fi
@@ -823,6 +826,19 @@ resolve_entry() {  # <origin-or-empty> <entry> [--include-archive]; prints "<id>
     2) return 2 ;;
     124) return 124 ;;
   esac
+  if [ "${3:-}" = --include-archive ]; then
+    if archived_task_show "$entry"; then
+      printf '%s archived-exact' "$entry"
+      return 0
+    fi
+    if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
+      legacy=$(legacy_hold_id "$origin" "$entry")
+      if archived_task_show "$legacy"; then
+        printf '%s archived-legacy' "$legacy"
+        return 0
+      fi
+    fi
+  fi
   if [ -n "$origin" ] && [ "$origin" != "$BINDING_ANY" ]; then
     legacy=$(legacy_hold_id "$origin" "$entry")
     fail "no captain-held task $entry and no migrated hold for it in this home's configured backlog (data directory $DATA); the nearest legacy identity $legacy also resolves to nothing"
@@ -885,7 +901,7 @@ verify_entry_durable() {  # <origin-or-empty> <entry>; prints "<id> <how>"
     exit "$resolve_status"
   fi
   printf '%s\n' "$resolved"
-  verify_hold_durable "${resolved%% *}"
+  verify_hold_durable "${resolved%% *}" "${resolved##* }"
 }
 
 command_hold() {
