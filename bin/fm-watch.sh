@@ -63,8 +63,9 @@
 #                          only up to BUSY_TURN_MAX_SECS into its current turn
 #                          (when the trusted busy record turned busy) with no
 #                          completed turn (state/<id>.turn-ended, or the spawn
-#                          record before any turn completes). Past that bound, a declared external
-#                          wait or verified captain-held transfer uses the long
+#                          record before any turn completes). Past that bound,
+#                          a declared external wait or verified captain-held
+#                          transfer uses the long
 #                          pause recheck cadence; under daemon-backed afk an
 #                          external wait is instead handed to the daemon as this
 #                          plain reason once per declaration, while captain-held
