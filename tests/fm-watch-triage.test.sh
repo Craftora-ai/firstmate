@@ -2419,10 +2419,12 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
 # pane stays exempt and a wedge timer left from earlier polls is cleared. A
 # turn that has itself been open past the bound still escalates, including one
 # whose adapter keeps re-reporting busy (OpenCode's session.status retry), and
-# an idle non-busy stale pane keeps the ordinary wedge escalation.
+# an idle non-busy stale pane keeps the ordinary wedge escalation. A Claude
+# turn opened by UserPromptSubmit right after an interrupted turn (no Stop, so
+# the old busy record remains) is aged from its own start too.
 test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
   local variant dir state fakebin out capture_file window key gen pane pid now harness source
-  for variant in fresh-turn over-age-turn repeated-busy-turn idle-pane; do
+  for variant in fresh-turn interrupted-turn over-age-turn repeated-busy-turn idle-pane; do
     dir=$(make_case "long-turn-$variant"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-long-$variant"
     harness=claude; source=claude-hook
@@ -2446,13 +2448,17 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
         --source "$source" --event user-prompt-submit
     fi
     case "$variant" in
-      over-age-turn|repeated-busy-turn)
+      interrupted-turn|over-age-turn|repeated-busy-turn)
         backdate_busy_turn_start "$state" "long-$variant" $(( now - 3700 )) ;;
     esac
-    if [ "$variant" = repeated-busy-turn ]; then
-      "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
-        --source "$source" --event session-retry
-    fi
+    case "$variant" in
+      repeated-busy-turn)
+        "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
+          --source "$source" --event session-retry ;;
+      interrupted-turn)
+        "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
+          --source "$source" --event user-prompt-submit ;;
+    esac
     key=$(printf '%s' "$window" | tr ':/.' '___')
     printf '%s' "$(hash_text "$pane")" > "$state/.hash-$key"
     printf '1\n' > "$state/.count-$key"
@@ -2464,13 +2470,13 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
     watch_bg "$state" "$fakebin" "$out" env FM_FAKE_TMUX_WINDOW="$window" \
       FM_FAKE_TMUX_CAPTURE="$capture_file" FM_BUSY_TURN_MAX_SECS=3600 FM_STALE_ESCALATE_SECS=240
     pid=$!
-    if [ "$variant" = fresh-turn ]; then
+    if [ "$variant" = fresh-turn ] || [ "$variant" = interrupted-turn ]; then
       if ! wait_poll_cycle "$state" "$pid"; then
-        reap "$pid"; fail "a fresh long Claude turn after an idle gap was wedge-escalated: $(cat "$out")"
+        reap "$pid"; fail "$variant: a fresh long Claude turn was wedge-escalated: $(cat "$out")"
       fi
-      [ ! -s "$out" ] || fail "a fresh long Claude turn printed a wake reason: $(cat "$out")"
-      [ ! -e "$state/.stale-since-$key" ] || fail "a fresh long Claude turn kept the wedge timer"
-      [ ! -e "$state/.wedge-escalations-$key" ] || fail "a fresh long Claude turn kept the escalation count"
+      [ ! -s "$out" ] || fail "$variant: a fresh long Claude turn printed a wake reason: $(cat "$out")"
+      [ ! -e "$state/.stale-since-$key" ] || fail "$variant: a fresh long Claude turn kept the wedge timer"
+      [ ! -e "$state/.wedge-escalations-$key" ] || fail "$variant: a fresh long Claude turn kept the escalation count"
       reap "$pid"
     else
       wait_for_exit "$pid" 100 || { reap "$pid"; fail "$variant did not wedge-escalate"; }
@@ -2479,7 +2485,7 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
     fi
   done
   unset FM_FAKE_CREW_STATE
-  pass "a long busy turn is aged from its own start, while over-age, repeatedly busy, and idle stale panes still escalate"
+  pass "a long busy turn, including one opened after an interrupt, is aged from its own start, while over-age, repeatedly busy, and idle stale panes still escalate"
 }
 
 # --- non-terminal stale, crew NOT provably working: surfaced immediately ------

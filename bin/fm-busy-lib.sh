@@ -17,7 +17,9 @@
 #   v1 gen=<token> seq=<uint> state=<busy|idle|unknown> source=<token> event=<token> ts=<epoch>
 #
 # ts is when the recorded state began: the writer keeps it across events that
-# repeat the same state within one gen, so a busy record's ts is its turn start.
+# repeat the same state within one gen, except that a turn-opening event
+# (user-prompt-submit, before-agent) always starts a new ts, so a busy
+# record's ts is its turn start.
 #
 # Gen sidecar: state/<id>.busy-gen - one token minted when the task's busy
 # wiring is armed (fm-spawn, or a documented recovery re-arm). Every event

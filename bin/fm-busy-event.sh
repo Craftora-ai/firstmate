@@ -19,6 +19,8 @@
 #       sidecar, advance seq under the lock, atomically replace the record.
 #       An event that repeats the record's current state keeps its ts, so ts
 #       is when the current state began (a busy record's ts is its turn start).
+#       A turn-opening event (user-prompt-submit, before-agent) always starts
+#       a new ts, even over a busy record left by an interrupted turn.
 #       Adapter wiring passes the exact --gen embedded at arm time, so a
 #       hook that outlives its incarnation fails closed here. The legacy
 #       Claude fm-send --key Escape path (fm-interrupt) and firstmate recovery
@@ -239,7 +241,8 @@ if [ -f "$REC" ]; then
         *) OLD_SEQ=$old_seq_field ;;
       esac
       old_ts_field=${old_line##* ts=}
-      case "$old_line" in
+      case "$EVENT:$old_line" in
+        user-prompt-submit:*|before-agent:*) ;;
         *" state=$NEW_STATE "*)
           case "$old_ts_field" in
             ''|*[!0-9]*) ;;
