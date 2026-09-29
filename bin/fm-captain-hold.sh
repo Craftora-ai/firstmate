@@ -384,8 +384,9 @@ task_show() {  # <id>; sets TASK_SHOW_OUTPUT
 
 # Completion-only read of a retained markdown row. tasks-axi show reads active
 # sections only, so an archive's `## Archived <date>` blocks need this narrow
-# reader. The archive path comes from tasks-axi's own config resolver, run from
-# the backlog root the way retention runs; absent settings use the backlog's
+# reader. The archive path is `[markdown] archive` parsed as TOML from the
+# backlog root's .tasks.toml, else the home tasks-axi config, relative to the
+# backlog root the way retention resolves it; absent settings use the backlog's
 # sibling.
 # Never use a stale markdown archive on a non-markdown backend. An id retained
 # more than once reads its last, newest block.
@@ -395,16 +396,24 @@ archived_task_show() {  # <id>; sets TASK_SHOW_OUTPUT
   root=$(fm_backlog_root "$data") || fail "cannot resolve the backlog root for $id"
   backend=$(fm_tasks_axi_backend "$root") || exit 2
   [ "$backend" = markdown ] || return 1
-  archive=$(cd "$root" && node --input-type=module -e '
-    import { realpathSync } from "node:fs";
-    import { dirname, join } from "node:path";
-    import { pathToFileURL } from "node:url";
-    const [bin, fallback] = process.argv.slice(1);
-    const config = join(dirname(realpathSync(bin)), "..", "src", "config.js");
-    const { resolveConfig } = await import(pathToFileURL(config).href);
-    process.stdout.write(resolveConfig().archivePath ?? fallback);
-  ' "$(command -v tasks-axi)" "$data/done-archive.md") \
+  archive=$(python3 -c '
+import sys, tomllib
+for path in sys.argv[1:]:
+    try:
+        with open(path, "rb") as fh:
+            archive = tomllib.load(fh).get("markdown", {}).get("archive")
+    except FileNotFoundError:
+        continue
+    if archive is None:
+        continue
+    if not isinstance(archive, str) or not archive.strip():
+        sys.exit(f"{path}: [markdown] archive must be a non-empty string")
+    print(archive, end="")
+    break
+' "$root/.tasks.toml" "${HOME:-}/.tasks-axi/config.toml") \
     || fail "cannot resolve the retention archive for $id"
+  [ -n "$archive" ] || archive=$data/done-archive.md
+  case "$archive" in /*) ;; *) archive=$root/$archive ;; esac
   [ -e "$archive" ] || [ -L "$archive" ] || return 1
   [ -f "$archive" ] && [ -r "$archive" ] || fail "cannot read retention archive $archive"
   TASK_SHOW_OUTPUT=$(perl -MJSON::PP -MEncode -e '

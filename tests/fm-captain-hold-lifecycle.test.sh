@@ -4190,38 +4190,42 @@ test_archived_resolution_prefers_active_and_newest() {
   pass "archived resolution prefers active rows and the newest retained row"
 }
 
-# The archive setting is read by tasks-axi's own resolver, so a TOML escape in
-# the path names the same file retention wrote.
-test_archived_inventory_reads_escaped_archive_path() {
+# The archive setting is read as TOML from the backlog root, never through the
+# tasks-axi installation, so a wrapper tasks-axi on PATH still finds retained
+# answers, and a literal-string backslash names the same file retention wrote.
+test_archived_inventory_reads_literal_archive_path_through_wrapper() {
   local fixture_home id call archive
-  fixture_home=$(make_home archived-escaped-path)
-  id=sample-escaped-review
-  call=sample-escaped-call
+  fixture_home=$(make_home archived-literal-path)
+  id=sample-literal-review
+  call=sample-literal-call
+  archive="$fixture_home/history/done\\archive.md"
   printf '%s\n' 'backend = "markdown"' '[markdown]' 'path = "data/backlog.md"' \
-    'archive = "history/done\u002darchive.md"' 'done_keep = 10' > "$fixture_home/.tasks.toml"
+    "archive = 'history/done\\archive.md'" 'done_keep = 10' > "$fixture_home/.tasks.toml"
   mkdir -p "$fixture_home/history"
+  printf '#!/bin/sh\nexec "%s" "$@"\n' "$TASKS_AXI_BIN" > "$fixture_home/fakebin/tasks-axi"
+  chmod +x "$fixture_home/fakebin/tasks-axi"
   write_origin_meta "$fixture_home" "$id"
-  run_captain "$fixture_home" hold "$call" --title "Choose the escaped option" \
-    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold escaped fixture"
-  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest escaped fixture"
-  printf 'Choose the escaped option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" hold "$call" --title "Choose the literal option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold literal fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest literal fixture"
+  printf 'Choose the literal option.\n' > "$fixture_home/decision.txt"
   run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
-    || fail "could not answer escaped fixture"
-  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive escaped fixture"
-  archive=$(grep -rl "$call" "$fixture_home/history") || fail "retention did not archive under history/"
-  assert_grep 'Choose the escaped option.' "$archive" "retention lost the escaped-path answer"
+    || fail "could not answer literal fixture"
+  (cd "$fixture_home" && "$fixture_home/fakebin/tasks-axi" prune --keep 0 >/dev/null) \
+    || fail "could not archive literal fixture through the wrapper"
+  assert_grep 'Choose the literal option.' "$archive" "retention missed the literal archive path"
   [ ! -e "$fixture_home/data/done-archive.md" ] || fail "retention used the default archive"
   run_captain "$fixture_home" verify "$id" > "$fixture_home/verify.out" 2> "$fixture_home/verify.err" \
-    || fail "verification missed the escaped archive path: $(cat "$fixture_home/verify.err")"
+    || fail "verification through a wrapper tasks-axi missed the archive: $(cat "$fixture_home/verify.err")"
   run_captain "$fixture_home" complete "$id" "$call" >/dev/null \
-    || fail "completion missed the escaped archive path"
-  pass "archived inventory reads the archive path exactly as retention resolves it"
+    || fail "completion through a wrapper tasks-axi missed the archive"
+  pass "archived inventory reads the configured archive through a wrapper tasks-axi"
 }
 
 test_completion_survives_done_archival
 test_archived_inventory_uses_configured_root
 test_archived_resolution_prefers_active_and_newest
-test_archived_inventory_reads_escaped_archive_path
+test_archived_inventory_reads_literal_archive_path_through_wrapper
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes
