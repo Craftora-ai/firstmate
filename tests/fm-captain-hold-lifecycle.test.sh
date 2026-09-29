@@ -4161,12 +4161,67 @@ test_archived_resolution_prefers_active_and_newest() {
     || fail "a call retained twice could not complete: $(cat "$fixture_home/reheld.err")"
   run_captain "$fixture_home" verify "$id" > "$fixture_home/reheld.out" 2> "$fixture_home/reheld.err" \
     || fail "a call retained twice could not verify: $(cat "$fixture_home/reheld.err")"
+
+  # The reverse order: an older answer cannot satisfy a newer unanswered close.
+  id=sample-reclosed-review
+  call=sample-reclosed-call
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the answered option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold answered fixture"
+  printf 'Choose the answered option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer first fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive answered fixture"
+  run_captain "$fixture_home" hold "$call" --title "Choose the unanswered option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not re-hold answered fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest re-held fixture"
+  tasks_in "$fixture_home" 'done' "$call" --no-prune >/dev/null || fail "could not close re-held fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive re-held fixture"
+  [ "$(grep -c "^- \[x\] $call - " "$fixture_home/data/done-archive.md")" = 2 ] \
+    || fail "the archive does not retain both rows of the re-closed call"
+  if run_captain "$fixture_home" verify "$id" > "$fixture_home/reclosed.out" 2> "$fixture_home/reclosed.err"; then
+    fail "an older archived answer satisfied a newer call closed without one"
+  fi
+  assert_grep 'neither held for the captain nor closed with a recorded captain answer' \
+    "$fixture_home/reclosed.err" "the re-closed call refused for an unrelated reason"
+  if run_captain "$fixture_home" complete "$id" "$call" > "$fixture_home/reclosed.out" 2> "$fixture_home/reclosed.err"; then
+    fail "completion accepted an older archived answer for a newer unanswered call"
+  fi
   pass "archived resolution prefers active rows and the newest retained row"
+}
+
+# The archive setting is read by tasks-axi's own resolver, so a TOML escape in
+# the path names the same file retention wrote.
+test_archived_inventory_reads_escaped_archive_path() {
+  local fixture_home id call archive
+  fixture_home=$(make_home archived-escaped-path)
+  id=sample-escaped-review
+  call=sample-escaped-call
+  printf '%s\n' 'backend = "markdown"' '[markdown]' 'path = "data/backlog.md"' \
+    'archive = "history/done\u002darchive.md"' 'done_keep = 10' > "$fixture_home/.tasks.toml"
+  mkdir -p "$fixture_home/history"
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the escaped option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold escaped fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest escaped fixture"
+  printf 'Choose the escaped option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer escaped fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive escaped fixture"
+  archive=$(grep -rl "$call" "$fixture_home/history") || fail "retention did not archive under history/"
+  assert_grep 'Choose the escaped option.' "$archive" "retention lost the escaped-path answer"
+  [ ! -e "$fixture_home/data/done-archive.md" ] || fail "retention used the default archive"
+  run_captain "$fixture_home" verify "$id" > "$fixture_home/verify.out" 2> "$fixture_home/verify.err" \
+    || fail "verification missed the escaped archive path: $(cat "$fixture_home/verify.err")"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null \
+    || fail "completion missed the escaped archive path"
+  pass "archived inventory reads the archive path exactly as retention resolves it"
 }
 
 test_completion_survives_done_archival
 test_archived_inventory_uses_configured_root
 test_archived_resolution_prefers_active_and_newest
+test_archived_inventory_reads_escaped_archive_path
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes

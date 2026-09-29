@@ -384,8 +384,9 @@ task_show() {  # <id>; sets TASK_SHOW_OUTPUT
 
 # Completion-only read of a retained markdown row. tasks-axi show reads active
 # sections only, so an archive's `## Archived <date>` blocks need this narrow
-# reader. Resolve the same project-over-user archive setting as tasks-axi,
-# relative to the backlog root; absent settings use the backlog's sibling.
+# reader. The archive path comes from tasks-axi's own config resolver, run from
+# the backlog root the way retention runs; absent settings use the backlog's
+# sibling.
 # Never use a stale markdown archive on a non-markdown backend. An id retained
 # more than once reads its last, newest block.
 archived_task_show() {  # <id>; sets TASK_SHOW_OUTPUT
@@ -394,33 +395,15 @@ archived_task_show() {  # <id>; sets TASK_SHOW_OUTPUT
   root=$(fm_backlog_root "$data") || fail "cannot resolve the backlog root for $id"
   backend=$(fm_tasks_axi_backend "$root") || exit 2
   [ "$backend" = markdown ] || return 1
-  archive=$(perl -e '
-    use strict;
-    use warnings;
-    my ($fallback, $root, @configs) = @ARGV;
-    my $archive;
-    for my $path (@configs) {
-      next unless -e $path || -l $path;
-      open my $fh, "<", $path or die "cannot read $path: $!\n";
-      my $markdown = 0;
-      while (my $line = <$fh>) {
-        if ($line =~ /^\s*\[([^\]]+)\]\s*(?:#.*)?$/) {
-          my $section = $1;
-          $section =~ s/^\s+|\s+$//g;
-          $markdown = $section eq "markdown";
-        }
-        next unless $markdown && $line =~ /^\s*archive\s*=\s*(.*)$/;
-        my $value = $1;
-        $value =~ /^(["\x27])(.*?)\1\s*(?:#.*)?$/
-          or die "invalid markdown.archive in $path\n";
-        $archive = $2;
-        $archive =~ /\S/ or die "empty markdown.archive in $path\n";
-      }
-      close $fh or die "cannot close $path: $!\n";
-    }
-    print !defined($archive) ? $fallback
-      : $archive =~ m{^/} ? $archive : "$root/$archive";
-  ' "$data/done-archive.md" "$root" "${HOME:-}/.tasks-axi/config.toml" "$root/.tasks.toml") \
+  archive=$(cd "$root" && node --input-type=module -e '
+    import { realpathSync } from "node:fs";
+    import { dirname, join } from "node:path";
+    import { pathToFileURL } from "node:url";
+    const [bin, fallback] = process.argv.slice(1);
+    const config = join(dirname(realpathSync(bin)), "..", "src", "config.js");
+    const { resolveConfig } = await import(pathToFileURL(config).href);
+    process.stdout.write(resolveConfig().archivePath ?? fallback);
+  ' "$(command -v tasks-axi)" "$data/done-archive.md") \
     || fail "cannot resolve the retention archive for $id"
   [ -e "$archive" ] || [ -L "$archive" ] || return 1
   [ -f "$archive" ] && [ -r "$archive" ] || fail "cannot read retention archive $archive"
