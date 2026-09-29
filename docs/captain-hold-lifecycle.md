@@ -114,7 +114,7 @@ Scout teardown calls the read-only `verify` subcommand after checking for the re
 `verify` checks three things:
 
 - The recorded attestation exists.
-- Every recorded inventory entry is still durable: actively captain-held, or carrying a recorded answer.
+- Every recorded inventory entry is still durable: actively captain-held, or carrying a recorded answer, even after Done retention moved the answered row to its archive.
 - No keyed status decision opened after the last `complete`.
 
 A keyed status decision opened after the last `complete` makes `verify` fail, and re-running `complete` is the repair.
