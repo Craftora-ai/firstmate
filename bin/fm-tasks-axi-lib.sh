@@ -176,6 +176,88 @@ fm_tasks_axi_backend() {  # <tasks-axi-working-directory>
   fm_tasks_axi_backend_resolve "$1"
 }
 
+# Read `archive` under `[markdown]` from one TOML file: prints the value, returns
+# 1 when the file or key is absent, and returns 2 naming the file and the value
+# when it is not a one-line string this reader decodes exactly. A literal string
+# is taken as written; a basic string decodes only \\ and \".
+fm_tasks_axi_markdown_archive_from_toml() {  # <toml-path>
+  local toml=$1
+  [ -f "$toml" ] || return 1
+  LC_ALL=C awk -v toml="$toml" '
+    function refuse() {
+      printf "%s: [markdown] archive must be a non-empty one-line string whose only escapes are \\\\ and \\\", got: %s\n", toml, raw > "/dev/stderr"
+      status=2
+      exit
+    }
+    BEGIN { section=""; single=sprintf("%c", 39); status=1 }
+    {
+      line=$0
+      sub(/^[[:space:]]+/, "", line)
+      if (match(line, /^\[[^]]*\]/)) {
+        section=substr(line, 2, RLENGTH - 2)
+        gsub(/[[:space:]]/, "", section)
+        next
+      }
+      if (section != "markdown" || line !~ /^archive[[:space:]]*=/) next
+      raw=line
+      sub(/^archive[[:space:]]*=[[:space:]]*/, "", raw)
+      sub(/[[:space:]]+$/, "", raw)
+      value=""
+      rest=""
+      quote=substr(raw, 1, 1)
+      if (quote == single) {
+        end=index(substr(raw, 2), single)
+        if (!end) refuse()
+        value=substr(raw, 2, end - 1)
+        rest=substr(raw, end + 2)
+      } else if (quote == "\"") {
+        closed=0
+        for (i=2; i <= length(raw); i++) {
+          c=substr(raw, i, 1)
+          if (c == "\\") {
+            c=substr(raw, ++i, 1)
+            if (c != "\\" && c != "\"") refuse()
+          } else if (c == "\"") {
+            closed=1
+            rest=substr(raw, i + 1)
+            break
+          }
+          value=value c
+        }
+        if (!closed) refuse()
+      } else {
+        refuse()
+      }
+      if (value == "" || rest !~ /^[[:space:]]*(#.*)?$/) refuse()
+      print value
+      status=0
+      exit
+    }
+    END { exit status }
+  ' "$toml"
+}
+
+# Resolve the markdown retention archive with the same precedence as tasks-axi:
+# the root .tasks.toml, then the home config, relative to the working directory;
+# unset means done-archive.md beside the backlog file.
+fm_tasks_axi_markdown_archive() {  # <tasks-axi-working-directory> <backlog-file>
+  local root=$1 backlog=$2 config archive status
+  for config in "$root/.tasks.toml" ${HOME:+"$HOME/.tasks-axi/config.toml"}; do
+    status=0
+    archive=$(fm_tasks_axi_markdown_archive_from_toml "$config") || status=$?
+    case "$status" in
+      0)
+        case "$archive" in /*) ;; *) archive=$root/$archive ;; esac
+        printf '%s\n' "$archive"
+        return 0
+        ;;
+      1) ;;
+      *) return "$status" ;;
+    esac
+  done
+  printf '%s/done-archive.md\n' "$(dirname "$backlog")"
+}
+
 fm_backlog_backend_value() {
   local config_dir=$1 backend_file value
   backend_file="$config_dir/backlog-backend"

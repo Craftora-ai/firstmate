@@ -384,60 +384,45 @@ task_show() {  # <id>; sets TASK_SHOW_OUTPUT
 
 # Completion-only read of a retained markdown row. tasks-axi show reads active
 # sections only, so an archive's `## Archived <date>` blocks need this narrow
-# reader. The archive path is `[markdown] archive` parsed as TOML from the
-# backlog root's .tasks.toml, else the home tasks-axi config, relative to the
-# backlog root the way retention resolves it; absent settings use the backlog's
-# sibling.
-# Never use a stale markdown archive on a non-markdown backend. An id retained
-# more than once reads its last, newest block.
+# reader. bin/fm-tasks-axi-lib.sh resolves the archive path the way retention
+# does. Never use a stale markdown archive on a non-markdown backend. An id
+# retained more than once reads its last, newest block.
 archived_task_show() {  # <id>; sets TASK_SHOW_OUTPUT
   local id=$1 data root backend archive status=0
   data=$(fm_backlog_data_absolute "$DATA") || fail "data directory cannot be resolved: $DATA"
   root=$(fm_backlog_root "$data") || fail "cannot resolve the backlog root for $id"
   backend=$(fm_tasks_axi_backend "$root") || exit 2
   [ "$backend" = markdown ] || return 1
-  archive=$(python3 -c '
-import sys, tomllib
-for path in sys.argv[1:]:
-    try:
-        with open(path, "rb") as fh:
-            archive = tomllib.load(fh).get("markdown", {}).get("archive")
-    except FileNotFoundError:
-        continue
-    if archive is None:
-        continue
-    if not isinstance(archive, str) or not archive.strip():
-        sys.exit(f"{path}: [markdown] archive must be a non-empty string")
-    print(archive, end="")
-    break
-' "$root/.tasks.toml" "${HOME:-}/.tasks-axi/config.toml") \
+  archive=$(fm_tasks_axi_markdown_archive "$root" "$(fm_backlog_file "$data")") \
     || fail "cannot resolve the retention archive for $id"
-  [ -n "$archive" ] || archive=$data/done-archive.md
-  case "$archive" in /*) ;; *) archive=$root/$archive ;; esac
   [ -e "$archive" ] || [ -L "$archive" ] || return 1
   [ -f "$archive" ] && [ -r "$archive" ] || fail "cannot read retention archive $archive"
-  TASK_SHOW_OUTPUT=$(perl -MJSON::PP -MEncode -e '
-    use strict;
-    use warnings;
-    my ($path, $id) = @ARGV;
-    open my $fh, "<:raw", $path or die "cannot read $path: $!\n";
-    my ($count, $inside, $body) = (0, 0, "");
-    while (my $line = <$fh>) {
-      $line =~ s/\r?\n$//;
-      if ($line =~ /^- \[x\] \Q$id\E - /) {
-        ++$count;
-        ($inside, $body) = (1, "");
-      } elsif ($inside && $line =~ /^  (.*)$/) {
-        $body .= "$1\n";
-      } elsif ($line =~ /\S/) {
-        $inside = 0;
+  TASK_SHOW_OUTPUT=$(LC_ALL=C awk -v id="$id" '
+    function json(text,   out, i, c) {
+      out=""
+      for (i=1; i <= length(text); i++) {
+        c=substr(text, i, 1)
+        if (c == "\\" || c == "\"") out=out "\\" c
+        else if (c == "\n") out=out "\\n"
+        else if (c in control) out=out sprintf("\\u%04x", control[c])
+        else out=out c
       }
+      return "\"" out "\""
     }
-    close $fh or die "cannot close $path: $!\n";
-    exit 1 unless $count;
-    print "  state: done\n  hold_kind: \"-\"\n  body: ",
-      encode_json(Encode::decode("UTF-8", $body, Encode::FB_CROAK)), "\n";
-  ' "$archive" "$id") || status=$?
+    BEGIN {
+      for (i=1; i < 32; i++) control[sprintf("%c", i)]=i
+      row="- [x] " id " - "
+    }
+    { sub(/\r$/, "") }
+    /^## / { archived=($0 ~ /^## Archived /); inside=0; next }
+    archived && index($0, row) == 1 { ++count; inside=1; body=""; next }
+    inside && /^  / { body=body substr($0, 3) "\n"; next }
+    /[^[:space:]]/ { inside=0 }
+    END {
+      if (!count) exit 1
+      printf "  state: done\n  hold_kind: \"-\"\n  body: %s\n", json(body)
+    }
+  ' "$archive") || status=$?
   case "$status" in
     0|1) return "$status" ;;
     *) fail "cannot read archived captain-held task $id from $archive" ;;

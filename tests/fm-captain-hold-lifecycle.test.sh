@@ -4190,7 +4190,7 @@ test_archived_resolution_prefers_active_and_newest() {
   pass "archived resolution prefers active rows and the newest retained row"
 }
 
-# The archive setting is read as TOML from the backlog root, never through the
+# The archive setting is read from the backlog root's TOML, never through the
 # tasks-axi installation, so a wrapper tasks-axi on PATH still finds retained
 # answers, and a literal-string backslash names the same file retention wrote.
 test_archived_inventory_reads_literal_archive_path_through_wrapper() {
@@ -4222,10 +4222,98 @@ test_archived_inventory_reads_literal_archive_path_through_wrapper() {
   pass "archived inventory reads the configured archive through a wrapper tasks-axi"
 }
 
+# A basic-string archive setting decodes \\ and \" as TOML defines them, so it
+# names the same file as the literal-string spelling retention archived under.
+test_archived_inventory_reads_escaped_archive_path() {
+  local fixture_home id call archive
+  fixture_home=$(make_home archived-escaped-path)
+  id=sample-escaped-review
+  call=sample-escaped-call
+  archive="$fixture_home/history/say \"done\"\\archive.md"
+  printf '%s\n' 'backend = "markdown"' '[markdown]' 'path = "data/backlog.md"' \
+    "archive = 'history/say \"done\"\\archive.md'" 'done_keep = 10' > "$fixture_home/.tasks.toml"
+  mkdir -p "$fixture_home/history"
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the escaped option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold escaped fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest escaped fixture"
+  printf 'Choose the escaped option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer escaped fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive escaped fixture"
+  assert_grep 'Choose the escaped option.' "$archive" "retention missed the literal archive path"
+  printf '%s\n' 'backend = "markdown"' '[markdown]' 'path = "data/backlog.md"' \
+    'archive = "history/say \"done\"\\archive.md" # same file' 'done_keep = 10' > "$fixture_home/.tasks.toml"
+  run_captain "$fixture_home" verify "$id" > "$fixture_home/verify.out" 2> "$fixture_home/verify.err" \
+    || fail "verification missed the escaped archive path: $(cat "$fixture_home/verify.err")"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null \
+    || fail "completion missed the escaped archive path"
+  pass "archived inventory decodes basic-string escapes in the archive path"
+}
+
+# Any other escape or a malformed archive setting refuses by file and value
+# instead of guessing which file retention wrote.
+test_archived_inventory_refuses_undecodable_archive_path() {
+  local fixture_home id call value
+  fixture_home=$(make_home archived-undecodable-path)
+  id=sample-undecodable-review
+  call=sample-undecodable-call
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the undecodable option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold undecodable fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest undecodable fixture"
+  printf 'Choose the undecodable option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer undecodable fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive undecodable fixture"
+  for value in '"data/done\u002darchive.md"' '"data/done-archive.md' 'data/done-archive.md' '""'; do
+    printf '%s\n' 'backend = "markdown"' '[markdown]' 'path = "data/backlog.md"' \
+      "archive = $value" > "$fixture_home/.tasks.toml"
+    if run_captain "$fixture_home" verify "$id" > "$fixture_home/refused.out" 2> "$fixture_home/refused.err"; then
+      fail "verification guessed an archive path from $value"
+    fi
+    assert_grep "$fixture_home/.tasks.toml" "$fixture_home/refused.err" "the refusal of $value did not name the file"
+    assert_grep "got: $value" "$fixture_home/refused.err" "the refusal of $value did not name the value"
+    if run_captain "$fixture_home" complete "$id" "$call" > "$fixture_home/refused.out" 2> "$fixture_home/refused.err"; then
+      fail "completion guessed an archive path from $value"
+    fi
+  done
+  pass "archived inventory refuses an archive setting it cannot decode exactly"
+}
+
+# The archive lookup needs no Python: a python3 on PATH that fails when run
+# never reached, and answered archived calls still pass.
+test_archived_inventory_needs_no_python() {
+  local fixture_home id call
+  fixture_home=$(make_home archived-no-python)
+  id=sample-no-python-review
+  call=sample-no-python-call
+  printf '#!/bin/sh\ntouch "%s/python3-ran"\nexit 127\n' "$fixture_home" > "$fixture_home/fakebin/python3"
+  chmod +x "$fixture_home/fakebin/python3"
+  write_origin_meta "$fixture_home" "$id"
+  run_captain "$fixture_home" hold "$call" --title "Choose the plain option" \
+    --reason "captain choice pending" --repo sample >/dev/null || fail "could not hold no-python fixture"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null || fail "could not attest no-python fixture"
+  printf 'Choose the plain option.\n' > "$fixture_home/decision.txt"
+  run_captain "$fixture_home" answer "$call" --decision-file "$fixture_home/decision.txt" >/dev/null \
+    || fail "could not answer no-python fixture"
+  tasks_in "$fixture_home" prune --keep 0 >/dev/null || fail "could not archive no-python fixture"
+  assert_no_grep "$call" "$fixture_home/data/backlog.md" "retention left the no-python call active"
+  run_captain "$fixture_home" verify "$id" > "$fixture_home/verify.out" 2> "$fixture_home/verify.err" \
+    || fail "verification without python3 missed the archive: $(cat "$fixture_home/verify.err")"
+  run_captain "$fixture_home" complete "$id" "$call" >/dev/null \
+    || fail "completion without python3 missed the archive"
+  [ ! -e "$fixture_home/python3-ran" ] || fail "the archive lookup ran python3"
+  pass "archived inventory resolves answered calls without python3"
+}
+
 test_completion_survives_done_archival
 test_archived_inventory_uses_configured_root
 test_archived_resolution_prefers_active_and_newest
 test_archived_inventory_reads_literal_archive_path_through_wrapper
+test_archived_inventory_reads_escaped_archive_path
+test_archived_inventory_refuses_undecodable_archive_path
+test_archived_inventory_needs_no_python
 test_uninventoried_report_decision_refuses_completion
 test_hold_decodes_a_bare_scalar_body_without_the_nonref_default
 test_retained_body_keeps_its_utf8_bytes
