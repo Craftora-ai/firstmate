@@ -1,0 +1,26 @@
+1790668558 WAKE check: rearm-resurface
+1790668560 [watcher exited; drained+acked: --ack-through 4 --recovery-generation 60133.1790668558.GxELU8]
+1790668570 WAKE stale: crew:long
+1790668572 [watcher exited; drained+acked: --ack-through 5 --recovery-generation 61336.1790668570.jk4Cud]
+TURN_B_SUBMIT 1790668589
+1790668597 WAKE signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-lab.QArWbm/state/long.turn-ended
+1790668598 [watcher exited; drained+acked: --ack-through 7 --recovery-generation 65516.1790668597.K2pDK6]
+1790668609 WAKE stale: crew:long
+1790668611 [watcher exited; drained+acked: --ack-through 8 --recovery-generation 73197.1790668609.mv1WMD]
+1790668630 WAKE stale: crew:long (idle 15s, possible wedge, escalation 1)
+1790668632 [watcher exited; drained+acked: --ack-through 9 --recovery-generation 80286.1790668630.YbL5X1]
+1790668650 WAKE stale: crew:long (idle 15s, possible wedge, escalation 2)
+1790668652 [watcher exited; drained+acked: --ack-through 10 --recovery-generation 93117.1790668650.SlkrEd]
+1790668671 WAKE stale: crew:long (idle 15s, possible wedge, escalation 3, demand-deep-inspection: same pane has wedge-escalated 3 times in a row - do not re-absorb on the run-step/pane state alone)
+1790668673 [watcher exited; drained+acked: --ack-through 11 --recovery-generation 461.1790668671.2ttX3h]
+TURN_C_SUBMIT 1790668681 turn-ended-mtime=1790668594
+1790668759 WAKE stale: crew:long (idle 15s, possible wedge, escalation 1)
+1790668762 [watcher exited; drained+acked: --ack-through 12 --recovery-generation 9678.1790668759.MWf4Hg]
+1790668780 WAKE stale: crew:long (idle 15s, possible wedge, escalation 2)
+1790668781 [watcher exited; drained+acked: --ack-through 13 --recovery-generation 43560.1790668780.Y7pMxK]
+1790668798 WAKE stale: crew:long (idle 15s, possible wedge, escalation 3, demand-deep-inspection: same pane has wedge-escalated 3 times in a row - do not re-absorb on the run-step/pane state alone)
+1790668799 [watcher exited; drained+acked: --ack-through 14 --recovery-generation 49324.1790668798.4PfcSL]
+1790668803 WAKE signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-lab.QArWbm/state/long.turn-ended
+1790668805 [watcher exited; drained+acked: --ack-through 16 --recovery-generation 52794.1790668803.F7oqYt]
+1790668814 WAKE stale: crew:long
+1790668816 [watcher exited; drained+acked: --ack-through 17 --recovery-generation 55646.1790668814.SonAWF]

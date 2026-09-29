@@ -1,0 +1,13 @@
+1790668844 WAKE stale: crew:long
+1790668848 [watcher exited; drained+acked: --ack-through 18 --recovery-generation 61331.1790668844.ZjCEQn]
+1790668868 WAKE stale: crew:long (idle 16s, possible wedge, escalation 1)
+1790668870 [watcher exited; drained+acked: --ack-through 19 --recovery-generation 71542.1790668868.qiie8Z]
+TURN_D_SUBMIT 1790668888 turn-ended-mtime=1790668799
+1790668891 WAKE stale: crew:long (idle 18s, possible wedge, escalation 2)
+1790668893 [watcher exited; drained+acked: --ack-through 20 --recovery-generation 82621.1790668890.wzYNRy]
+1790668910 WAKE stale: crew:long (idle 15s, possible wedge, escalation 3, demand-deep-inspection: same pane has wedge-escalated 3 times in a row - do not re-absorb on the run-step/pane state alone)
+1790668912 [watcher exited; drained+acked: --ack-through 21 --recovery-generation 92035.1790668910.xJLZ6l]
+1790668930 WAKE stale: crew:long (idle 16s, possible wedge, escalation 4, demand-deep-inspection: same pane has wedge-escalated 4 times in a row - do not re-absorb on the run-step/pane state alone)
+1790668932 [watcher exited; drained+acked: --ack-through 22 --recovery-generation 98214.1790668930.HmpSAx]
+1790668949 WAKE stale: crew:long (idle 15s, possible wedge, escalation 5, demand-deep-inspection: same pane has wedge-escalated 5 times in a row - do not re-absorb on the run-step/pane state alone)
+1790668952 [watcher exited; drained+acked: --ack-through 23 --recovery-generation 7337.1790668949.hZ3mvV]
