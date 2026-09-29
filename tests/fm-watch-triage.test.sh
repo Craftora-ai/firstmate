@@ -2417,22 +2417,25 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
 # the current turn through the real busy writer. The turn-age bound must be
 # measured from that turn's start, not from the previous turn's end, so the
 # pane stays exempt and a wedge timer left from earlier polls is cleared. A
-# turn that has itself been open past the bound still escalates, and an idle
-# non-busy stale pane keeps the ordinary wedge escalation.
+# turn that has itself been open past the bound still escalates, including one
+# whose adapter keeps re-reporting busy (OpenCode's session.status retry), and
+# an idle non-busy stale pane keeps the ordinary wedge escalation.
 test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
-  local variant dir state fakebin out capture_file window key gen pane pid now
-  for variant in fresh-turn over-age-turn idle-pane; do
+  local variant dir state fakebin out capture_file window key gen pane pid now harness source
+  for variant in fresh-turn over-age-turn repeated-busy-turn idle-pane; do
     dir=$(make_case "long-turn-$variant"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-long-$variant"
+    harness=claude; source=claude-hook
+    [ "$variant" != repeated-busy-turn ] || { harness=opencode; source=opencode-plugin; }
     pane='✻ Thinking… (9m 4s · esc to interrupt)'
     [ "$variant" != idle-pane ] || pane='> '
     printf '%s' "$pane" > "$capture_file"
-    printf 'window=%s\nkind=ship\nharness=claude\n' "$window" > "$state/long-$variant.meta"
+    printf 'window=%s\nkind=ship\nharness=%s\n' "$window" "$harness" > "$state/long-$variant.meta"
     printf 'working: planning\n' > "$state/long-$variant.status"
     printf '%s' "$(seen_sig "$state/long-$variant.status")" > "$state/.seen-long-${variant}_status"
     gen=$("$ROOT/bin/fm-busy-event.sh" arm "$state" "long-$variant")
     "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" idle --gen "$gen" \
-      --source claude-hook --event stop
+      --source "$source" --event stop
     touch "$state/long-$variant.turn-ended"
     now=$(date +%s)
     set_mtime $(( now - 7200 )) "$state/long-$variant.turn-ended"
@@ -2440,9 +2443,16 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
     prime_turnend_seen "$state/long-$variant.turn-ended"
     if [ "$variant" != idle-pane ]; then
       "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
-        --source claude-hook --event user-prompt-submit
+        --source "$source" --event user-prompt-submit
     fi
-    [ "$variant" != over-age-turn ] || backdate_busy_turn_start "$state" "long-$variant" $(( now - 3700 ))
+    case "$variant" in
+      over-age-turn|repeated-busy-turn)
+        backdate_busy_turn_start "$state" "long-$variant" $(( now - 3700 )) ;;
+    esac
+    if [ "$variant" = repeated-busy-turn ]; then
+      "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
+        --source "$source" --event session-retry
+    fi
     key=$(printf '%s' "$window" | tr ':/.' '___')
     printf '%s' "$(hash_text "$pane")" > "$state/.hash-$key"
     printf '1\n' > "$state/.count-$key"
@@ -2463,13 +2473,13 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
       [ ! -e "$state/.wedge-escalations-$key" ] || fail "a fresh long Claude turn kept the escalation count"
       reap "$pid"
     else
-      wait_for_exit "$pid" 100 || fail "$variant did not wedge-escalate"
+      wait_for_exit "$pid" 100 || { reap "$pid"; fail "$variant did not wedge-escalate"; }
       grep -F "stale: $window" "$out" | grep -F 'possible wedge' >/dev/null \
         || fail "$variant lost its possible-wedge wake: $(cat "$out")"
     fi
   done
   unset FM_FAKE_CREW_STATE
-  pass "a long busy turn is aged from its own start, while over-age turns and idle stale panes still escalate"
+  pass "a long busy turn is aged from its own start, while over-age, repeatedly busy, and idle stale panes still escalate"
 }
 
 # --- non-terminal stale, crew NOT provably working: surfaced immediately ------

@@ -61,7 +61,7 @@
 #                          A genuinely busy pane
 #                          (window_is_busy true) is exempt from the above, but
 #                          only up to BUSY_TURN_MAX_SECS into its current turn
-#                          (the trusted busy record's event time) with no
+#                          (when the trusted busy record turned busy) with no
 #                          completed turn (state/<id>.turn-ended, or the spawn
 #                          record before any turn completes). Past that bound, a declared external
 #                          wait or verified captain-held transfer uses the long
@@ -1541,8 +1541,9 @@ wedge_timer_check() {  # <window> <since-file> <triage-label> <escalation-count-
 # busy_turn_over_age: 0 iff the current busy turn, the last completed turn, and
 # explicit native-harness progress are all at least BUSY_TURN_MAX_SECS old.
 # Progress is actual observed model or tool activity, never a timer or a busy
-# footer. The current turn's start is the event time of this incarnation's
-# trusted busy record (fm_busy_record_read), so a turn opened after a long idle
+# footer. The current turn's start is the ts of this incarnation's trusted busy
+# record (fm_busy_record_read), which repeated busy events within the turn do
+# not advance, so a turn opened after a long idle
 # gap is aged from its own start rather than from the previous turn's end; an
 # idle, malformed, stale-gen, or untrusted record supplies nothing. It does not
 # emit a wake or change semantic busy state. Before any marker exists, age the
