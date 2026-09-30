@@ -1415,6 +1415,26 @@ test_terminal_passed() {
   pass "terminal passed run is authoritative"
 }
 
+# A landing wait left in place after the PR merged must not relabel the landed
+# ship: the merged run-step done stays authoritative until teardown.
+test_terminal_passed_merged_keeps_done_over_landing_wait() {
+  reset_fakes
+  local d; d=$(new_case passed-landing-wait)
+  make_repo_on_branch "$d/wt" fm/feat-lw
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-lw.meta" "window=fm:fm-feat-lw" "worktree=$d/wt" "kind=ship" "branch=fm/feat-lw"
+  printf 'done: committed, waiting for landing\n' > "$d/state/feat-lw.status"
+  FM_STATE_OVERRIDE="$d/state" "$ROOT/bin/fm-landing-wait.sh" set feat-lw --reason 'merge approval' >/dev/null \
+    || fail "could not set landing wait"
+  FM_FAKE_AXI_STATUS="$(run_passed fm/feat-lw)"
+  local out; out=$(run_crew_state "$d" feat-lw)
+  assert_contains "$out" "state: done" "merged run with landing wait -> done"
+  assert_contains "$out" "source: run-step" "merged run with landing wait -> run-step source"
+  assert_contains "$out" "run passed: PR merged" "merged run keeps its merged detail"
+  assert_not_contains "$out" "awaiting landing" "landed ship must not read as awaiting landing"
+  pass "merged run-step done is not relabeled by a leftover landing wait"
+}
+
 test_terminal_passed_with_override() {
   reset_fakes
   local d; d=$(new_case passed-with-override)
@@ -5544,6 +5564,7 @@ test_ci_fixing_after_green_stays_working
 test_top_level_fixing_ci_running_after_green_stays_working
 test_top_level_fixing_done_log_stays_working
 test_terminal_passed
+test_terminal_passed_merged_keeps_done_over_landing_wait
 test_terminal_passed_with_override
 test_terminal_passed_with_skips
 test_terminal_passed_uses_matching_retirement_receipt_without_forge

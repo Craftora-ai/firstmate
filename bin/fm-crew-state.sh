@@ -207,10 +207,11 @@ SEP=' · '
 # Emit the one canonical line and exit 0. Detail is optional.
 emit() {  # <state> <source> [detail]
   local line="state: $1${SEP}source: $2" landing
-  # Preserve attributed active/unverified runs. A supervisor's landing wait can
-  # explain a finished ship or an otherwise unknown idle/dead endpoint only.
+  # Run-step results stay authoritative (a merged run is landed, not waiting). A
+  # supervisor's landing wait can explain a status-log done or an otherwise
+  # unknown idle/dead endpoint only.
   case "$1:$2" in
-    done:*|unknown:none|unknown:pane)
+    done:status-log|unknown:none|unknown:pane)
       if [ -f "$STATE/$ID.landing-wait" ] \
         && cmp -s "$META" "$STATE/$ID.meta" && cmp -s "$LOG" "$STATE/$ID.status" \
         && landing=$(fm_landing_wait_read "$STATE" "$ID"); then
