@@ -7,8 +7,11 @@
 # running no-mistakes step or a backend busy signal. A home that opts in with
 # config/turnend-churn-absorb lets a bare turn-end also use bounded pane churn
 # since the previous poll. Every other no-verb wake surfaces, so a crew
-# that finishes (or stops and waits) is never silently swallowed. A declared wait,
-# either a paused: external wait or a verified captain-held transfer, is the
+# that finishes (or stops and waits) is never silently swallowed. A landing wait
+# recorded separately by fm-landing-wait.sh for a finished ship quiets its idle
+# endpoint without replacing its done event; that script owns the contract.
+# A declared worker wait, either a paused: external wait or a verified
+# captain-held transfer, is the
 # separate idle absorb case and re-surfaces only on its long bounded cadence,
 # although its initial no-verb status signal still surfaces in normal mode.
 # That cadence is hours long and condition-aware: a paused: line naming
@@ -2901,7 +2904,7 @@ EOF
     # bin/fm-supervise-daemon.sh).
     # shellcheck disable=SC2086  # same space-separated status-path list
     if afk_present || [ "$signal_actionable" -eq 0 ] \
-      || { ! signal_crew_provably_working $files && ! signal_turnend_panes_churned $files; }; then
+      || { ! signal_crew_provably_working $files && ! signal_crews_landing_wait $files && ! signal_turnend_panes_churned $files; }; then
       while IFS=$(printf '\t') read -r sf sig f; do
         [ -n "$sf" ] || continue
         file_reason="$reason"
@@ -3004,6 +3007,13 @@ EOF
     # content cannot suppress stale detection. Read once per window per poll and
     # reused below so a busy verdict is consistent within one cycle.
     if window_is_busy "$w" "$tail40"; then busy_now=0; else busy_now=1; fi
+    if [ "$busy_now" -ne 0 ] && fm_landing_wait_read "$STATE" "$task" >/dev/null; then
+      # The supervisor already owns this finished ship's external dependency.
+      # Inbox loss detection and actionable status scanning ran above; checks
+      # still run below. Drop stale history so clearing the wait re-arms it.
+      rm -f "$sf" "$ssf" "$ewf" "$cf"
+      continue
+    fi
     if [ "$h" = "$prev" ]; then
       n=$(( $(cat "$cf" 2>/dev/null || echo 0) + 1 ))
       echo "$n" > "$cf"

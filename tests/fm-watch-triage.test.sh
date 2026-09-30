@@ -2509,6 +2509,251 @@ test_nonterminal_stale_paused_absorbed_then_resurfaced() {
   pass "a declared pause is absorbed on first sight, then re-surfaced as a recheck past the threshold, never wedge-escalated"
 }
 
+landing_fixture() {
+  local dir=$1
+  fm_git_init_commit "$dir/repo" || fail "cannot create landing fixture"
+  git -C "$dir/repo" checkout -qb fm/finished || fail "cannot branch fixture"
+  git -C "$dir/repo" -c user.name=Test -c user.email=test@example.invalid commit --allow-empty -qm 'finished work' || fail "cannot commit fixture"
+  printf 'kind=ship\nwindow=test:fm-finished\nbackend=tmux\nharness=grok\nworktree=%s\nbranch=fm/finished\n' \
+    "$dir/repo" > "$dir/state/finished.meta"
+  printf 'done: committed, waiting for independent audit\n' > "$dir/state/finished.status"
+}
+
+landing_command() {  # <state> <command> [arguments after id]
+  local state=$1 command=$2
+  shift 2
+  FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-landing-wait.sh" "$command" finished "$@"
+}
+
+test_landing_wait_record() {
+  local dir state original record append backend
+  dir=$(make_case landing-record); state="$dir/state"
+  landing_fixture "$dir"
+  original=$(cat "$state/finished.status")
+  landing_command "$state" set --reason 'independent audit finishes' >/dev/null || fail "could not set landing wait"
+  record=$(cat "$state/finished.landing-wait")
+  landing_command "$state" set --reason 'independent audit finishes' >/dev/null || fail "idempotent set failed"
+  [ "$record" = "$(cat "$state/finished.landing-wait")" ] || fail "set replaced an identical wait"
+  [ "$original" = "$(cat "$state/finished.status")" ] || fail "set impersonated the worker"
+  [ "$(landing_command "$state" show)" = 'independent audit finishes' ] || fail "show lost the condition"
+  FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE='state: working · source: run-step · fixing' \
+    signal_crews_landing_wait "$state/finished.status" "$state/active.turn-ended" \
+    || fail "mixed working and landing-wait signal was not absorbed"
+  FM_CREW_STATE_BIN="$dir/fakebin/fm-crew-state.sh" FM_FAKE_CREW_STATE='state: blocked · source: status-log · help needed' \
+    signal_crews_landing_wait "$state/finished.status" "$state/active.turn-ended" \
+    && fail "landing wait hid a non-working sibling signal"
+  printf 'resolved [key=default]: audit answer recorded\n' >> "$state/finished.status"
+  landing_command "$state" show >/dev/null || fail "keyed answer erased landing wait"
+  for append in 'working: resumed' 'blocked: access failed' 'needs-decision [key=api]: choose' 'failed: audit failed' 'paused: waiting on own build' 'captain-held: a separate hold' 'done: a new completion'; do
+    printf '%s\n' "$original" > "$state/finished.status"
+    landing_command "$state" set --reason 'audit finishes' >/dev/null || fail "could not rebind wait"
+    printf '%s\n' "$append" >> "$state/finished.status"
+    landing_command "$state" show >/dev/null 2>&1 && fail "new event left old landing wait active: $append"
+  done
+  printf '%s\n' "$original" > "$state/finished.status"
+  landing_command "$state" set --reason 'audit finishes' >/dev/null || fail "could not set commit control"
+  printf 'resumed edit\n' >> "$dir/repo/README.md"
+  landing_command "$state" show >/dev/null 2>&1 && fail "dirty worktree retained landing wait"
+  git -C "$dir/repo" -c user.name=Test -c user.email=test@example.invalid commit -qam 'follow-up' || fail "cannot commit follow-up"
+  landing_command "$state" show >/dev/null 2>&1 && fail "changed commit retained landing wait"
+  landing_command "$state" set --reason 'audit finishes' >/dev/null || fail "could not bind latest commit"
+  mv "$state/finished.status" "$state/old-status"
+  cp "$state/old-status" "$state/finished.status"
+  landing_command "$state" show >/dev/null 2>&1 && fail "replacement log retained landing wait"
+  landing_command "$state" set --reason 'audit finishes' >/dev/null || fail "could not bind replacement log"
+  for backend in tmux herdr zellij orca cmux; do
+    sed "s/^backend=.*/backend=$backend/" "$state/finished.meta" > "$state/next.meta"
+    mv "$state/next.meta" "$state/finished.meta"
+    landing_command "$state" set --reason 'audit finishes' >/dev/null || fail "cannot bind $backend metadata"
+    printf 'terminal=changed-endpoint\n' >> "$state/finished.meta"
+    landing_command "$state" show >/dev/null 2>&1 && fail "changed $backend endpoint retained landing wait"
+  done
+  landing_command "$state" set --reason 'audit finishes' >/dev/null || fail "cannot set malformed-record control"
+  printf 'extra record\n' >> "$state/finished.landing-wait"
+  landing_command "$state" show >/dev/null 2>&1 && fail "malformed wait record was accepted"
+  printf 'working: resumed\n' > "$state/finished.status"
+  landing_command "$state" set --reason 'audit finishes' >/dev/null 2>&1 && fail "unfinished work was parked"
+  printf '%s\n' "$original" > "$state/finished.status"
+  landing_command "$state" set --reason '   ' >/dev/null 2>&1 && fail "blank condition accepted"
+  landing_command "$state" set --reason $'audit\nextra' >/dev/null 2>&1 && fail "multiline condition accepted"
+  landing_command "$state" clear >/dev/null || fail "clear failed"
+  landing_command "$state" clear >/dev/null || fail "idempotent clear failed"
+  landing_command "$state" show >/dev/null 2>&1 && fail "cleared wait stayed active"
+  # Simulate a worker resuming during set's Git read, after the done check.
+  cat > "$dir/fakebin/git" <<'SH'
+#!/usr/bin/env bash
+for arg in "$@"; do
+  if [ "$arg" = status ] && [ ! -e "$FM_TEST_WAIT_ONCE" ]; then
+    : > "$FM_TEST_WAIT_ONCE"
+    printf 'working: resumed during wait registration\n' >> "$FM_TEST_WAIT_STATUS"
+  fi
+done
+exec "$FM_TEST_REAL_GIT" "$@"
+SH
+  chmod +x "$dir/fakebin/git"
+  FM_TEST_REAL_GIT=$(command -v git) FM_TEST_WAIT_STATUS="$state/finished.status" \
+    FM_TEST_WAIT_ONCE="$dir/append-once" PATH="$dir/fakebin:$PATH" \
+    landing_command "$state" set --reason 'audit finishes' >/dev/null 2>&1 \
+    && fail "concurrent worker resume was parked"
+  [ -e "$dir/append-once" ] || fail "concurrent-resume control never executed"
+  printf '%s\n' "$original" > "$state/finished.status"
+  printf 'kind=secondmate\n' >> "$state/finished.meta"
+  landing_command "$state" set --reason 'audit finishes' >/dev/null 2>&1 && fail "secondmate was parked as a ship"
+  pass "landing waits preserve done and keyed answers, bind completion and commit, and reject resumed or invalid work"
+}
+
+test_landing_wait_clear_and_busy_resume() {
+  local dir state fakebin key pid
+  dir=$(make_case landing-clear); state="$dir/state"; fakebin="$dir/fakebin"
+  landing_fixture "$dir"
+  key=test_fm-finished
+  printf 'stopped agent\n' > "$dir/pane"
+  prime_turnend_seen "$state/finished.status"
+  landing_command "$state" set --reason 'merge approval' >/dev/null || fail "cannot set wait"
+  # An earlier stale classification must not prevent clear from re-arming it.
+  printf '%s' "$(hash_text "$(cat "$dir/pane")")" > "$state/.hash-$key"
+  cp "$state/.hash-$key" "$state/.stale-$key"
+  printf '2\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-finished FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    watch_bg "$state" "$fakebin" "$dir/out" env
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "could not observe landing wait before clear"; }
+  landing_command "$state" clear >/dev/null || { reap "$pid"; fail "could not clear landing wait"; }
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "cleared landing wait never resumed stale monitoring"; }
+  grep -Fx 'stale: test:fm-finished' "$dir/out" >/dev/null || fail "clear lost ordinary stale wake"
+  ack_stopped_cycle "$state" || fail "could not acknowledge clear wake"
+  # A worker that resumes without writing a new status must still reach the
+  # established busy-wedge path. Use the existing Pi semantic event seam.
+  sed 's/^harness=grok$/harness=pi/' "$state/finished.meta" > "$state/pi.meta"
+  mv "$state/pi.meta" "$state/finished.meta"
+  record_pi_busy "$state" finished
+  touch -t 200001010000 "$state/finished.meta"
+  landing_command "$state" set --reason 'merge approval' >/dev/null || fail "cannot set busy control"
+  printf '%s\n' "$(( $(date +%s) - 500 ))" > "$state/.stale-since-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-finished FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=pi \
+    watch_bg "$state" "$fakebin" "$dir/out" env FM_BUSY_TURN_MAX_SECS=1 FM_STALE_ESCALATE_SECS=1
+  pid=$!
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "landing wait swallowed busy-wedge detection"; }
+  grep 'possible wedge' "$dir/out" >/dev/null || fail "busy resume lost normal wedge detection"
+  pass "clearing a landing wait re-arms stale monitoring and busy workers retain wedge detection"
+}
+
+test_landing_wait_daemon_and_current_state() (
+  local dir state fakebin result
+  dir=$(make_case landing-daemon); state="$dir/state"; fakebin="$dir/fakebin"
+  landing_fixture "$dir"
+  landing_command "$state" set --reason 'independent audit finishes' >/dev/null || fail "cannot set daemon wait"
+  # Do not consult the developer's real pipeline installation.
+  printf '#!/usr/bin/env bash\nexit 1\n' > "$fakebin/no-mistakes"
+  chmod +x "$fakebin/no-mistakes"
+  result=$(PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" "$ROOT/bin/fm-crew-state.sh" finished)
+  case "$result" in 'state: parked · source: landing-wait · awaiting landing: independent audit finishes'*) ;; *) fail "current state lost landing condition: $result" ;; esac
+  cp "$state/finished.meta" "$dir/snapshot.meta"
+  cp "$state/finished.status" "$dir/snapshot.status"
+  result=$(PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" \
+    FM_CREW_STATE_META_OVERRIDE="$dir/snapshot.meta" FM_CREW_STATE_STATUS_OVERRIDE="$dir/snapshot.status" \
+    "$ROOT/bin/fm-crew-state.sh" finished)
+  case "$result" in 'state: parked · source: landing-wait'*) ;; *) fail "fleet snapshot lost landing condition: $result" ;; esac
+  printf 'working: a different snapshot generation\n' >> "$dir/snapshot.status"
+  result=$(PATH="$fakebin:$PATH" FM_STATE_OVERRIDE="$state" \
+    FM_CREW_STATE_META_OVERRIDE="$dir/snapshot.meta" FM_CREW_STATE_STATUS_OVERRIDE="$dir/snapshot.status" \
+    "$ROOT/bin/fm-crew-state.sh" finished)
+  case "$result" in *'source: landing-wait'*) fail "mismatched snapshot borrowed live landing wait" ;; esac
+  # The daemon is sourced in this subshell, never launched as fleet supervision.
+  # shellcheck source=bin/fm-supervise-daemon.sh
+  . "$ROOT/bin/fm-supervise-daemon.sh"
+  FM_ESCALATE_BATCH_SECS=99999999
+  export FM_ESCALATE_BATCH_SECS
+  handle_wake "stale: test:fm-finished" "$state"
+  grep 'done: committed' "$state/.subsuper-escalations" >/dev/null || fail "wait swallowed unseen completion"
+  : > "$state/.subsuper-escalations"
+  printf 'resolved [key=default]: audit answer recorded\n' >> "$state/finished.status"
+  stale_marker_record test:fm-finished "$state"
+  handle_wake "stale: test:fm-finished" "$state"
+  [ ! -s "$state/.subsuper-escalations" ] || fail "daemon escalated active landing wait"
+  [ ! -e "$state/.subsuper-stale-finished" ] || fail "daemon left wedge aging for landing wait"
+  stale_marker_record test:fm-finished "$state"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW=test:fm-finished housekeeping "$state"
+  [ ! -e "$state/.subsuper-stale-finished" ] || fail "housekeeping kept obsolete stale marker"
+  printf 'needs-decision [key=audit]: audit found incompatible requirements\n' >> "$state/finished.status"
+  handle_wake "stale: test:fm-finished" "$state"
+  grep 'needs-decision' "$state/.subsuper-escalations" >/dev/null || fail "daemon swallowed a new decision"
+  pass "daemon preserves unseen completion and new decisions, clears obsolete wedge aging, and current state names landing waits"
+)
+
+test_landing_wait_quiets_stopped_ship() {
+  local dir state fakebin window key pid round posture
+  dir=$(make_case landing-watcher); state="$dir/state"; fakebin="$dir/fakebin"
+  landing_fixture "$dir"
+  window=test:fm-finished; key=test_fm-finished
+  prime_turnend_seen "$state/finished.status"
+  landing_command "$state" set --reason 'independent audit finishes' >/dev/null || fail "cannot set watcher wait"
+  for posture in attended quiet away; do
+    case "$posture" in
+      attended) rm -f "$state/.afk" ;;
+      quiet) printf '1 quiet\n' > "$state/.afk" ;;
+      away) printf '1\n' > "$state/.afk" ;;
+    esac
+    for round in 1 2; do
+      printf 'stopped terminal %s %s\n' "$posture" "$round" > "$dir/pane"
+      printf '%s' "$(hash_text "$(cat "$dir/pane")")" > "$state/.hash-$key"
+      printf '1\n' > "$state/.count-$key"
+      PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+        FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+        watch_bg "$state" "$fakebin" "$dir/out" env FM_PAUSE_RESURFACE_SECS=1 FM_STALE_ESCALATE_SECS=1
+      pid=$!
+      wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "landing wait raised a stale wake in $posture: $(cat "$dir/out")"; }
+      [ ! -s "$dir/out" ] && [ ! -s "$state/.wake-queue" ] || { reap "$pid"; fail "landing wait queued an alarm"; }
+      reap "$pid"
+      ack_stopped_cycle "$state" || fail "could not acknowledge test stop"
+    done
+  done
+  rm -f "$state/.afk"
+  printf 'resolved [key=default]: audit answer recorded\n' >> "$state/finished.status"
+  touch "$state/finished.turn-ended"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    watch_bg "$state" "$fakebin" "$dir/out" env
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "resolved or turn-end event woke landing wait: $(cat "$dir/out")"; }
+  reap "$pid"
+  ack_stopped_cycle "$state" || fail "could not acknowledge test stop"
+  # A real failure must wake even while its predecessor's wait record remains.
+  printf 'failed: independent audit found a defect\n' >> "$state/finished.status"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    watch_bg "$state" "$fakebin" "$dir/out" env
+  pid=$!
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "landing wait swallowed failure"; }
+  grep '^signal:' "$dir/out" >/dev/null || fail "failure did not surface as a signal"
+  pass "finished ships stay quiet across watcher restarts and postures; answers preserve waits and failures still wake"
+}
+
+# A committed, unlanded ship with a stopped agent still alarms every time its
+# idle terminal display changes. No real runtime or model is launched here.
+test_finished_ship_stale_reproduction() {
+  local dir state fakebin window key round pid
+  dir=$(make_case finished-ship-repro); state="$dir/state"; fakebin="$dir/fakebin"
+  window=test:fm-finished; key=test_fm-finished
+  landing_fixture "$dir"
+  prime_turnend_seen "$state/finished.status"
+  for round in 1 2; do
+    printf 'stopped agent, terminal display %s\n' "$round" > "$dir/pane"
+    printf '%s' "$(hash_text "$(cat "$dir/pane")")" > "$state/.hash-$key"
+    printf '1\n' > "$state/.count-$key"
+    PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+      FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+      watch_bg "$state" "$fakebin" "$dir/out" env
+    pid=$!
+    wait_for_exit "$pid" 100 || { reap "$pid"; fail "finished ship did not reproduce stale wake $round"; }
+    grep -Fx "stale: $window" "$dir/out" >/dev/null || fail "expected plain stale wake $round"
+    ack_stopped_cycle "$state" || fail "could not acknowledge reproduced stale wake"
+  done
+  pass "reproduced repeated stale wakes for a committed done ship with a stopped agent"
+}
+
 # Own background work is a declared wait using the same existing paused verb.
 # This intentionally keeps the first-sight alert, then uses the long cadence.
 # The backend/current-state fixtures are not live-harness evidence.
@@ -6700,6 +6945,11 @@ test_nonterminal_stale_not_working_surfaced
 test_nonterminal_stale_paused_absorbed_then_resurfaced
 test_exited_declared_pause_is_bounded_but_live_gate_surfaces
 test_own_work_wait_keeps_first_alert_then_long_cadence
+test_finished_ship_stale_reproduction
+test_landing_wait_record
+test_landing_wait_clear_and_busy_resume
+test_landing_wait_daemon_and_current_state
+test_landing_wait_quiets_stopped_ship
 test_absorbed_replacement_wait_does_not_inherit_the_old_throttle
 test_live_declared_wait_churn_honors_the_resurface_throttle
 test_live_paused_until_controls_recheck_time

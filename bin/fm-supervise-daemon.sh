@@ -441,6 +441,10 @@ classify_stale() {  # <window> <state> [<span-record> <span-status>]
     printf 'escalate|stale + actionable status: %s' "$event"
     return
   fi
+  if declared=$(fm_landing_wait_read "$state" "$task"); then
+    printf 'landing|awaiting landing: %s' "$declared"
+    return
+  fi
   declared=$(status_declared_wait_line "$state/$task.status")
   if [ -n "$declared" ] && status_is_paused_or_captain_held "$declared"; then
     # A DECLARED external-wait pause or a verified captain-held transfer
@@ -1233,6 +1237,10 @@ housekeeping() {  # <state>
       rm -f "$marker"; continue
     fi
     task=$(window_to_task "$win" "$state")
+    if fm_landing_wait_read "$state" "$task" >/dev/null; then
+      rm -f "$marker"
+      continue
+    fi
     last=$(status_declared_wait_line "$state/$task.status")
     if [ -n "$last" ] && status_is_paused_or_captain_held "$last"; then
       reconcile_pause_tracking "$win" "$state" "$last"
@@ -1618,6 +1626,12 @@ handle_wake() {  # <reason> <state>
     reconcile_pause_tracking "$arg" "$state" "$last"
   fi
   case "$action" in
+    landing)
+      stale_marker_remove "$arg" "$state"
+      pause_marker_remove "$arg" "$state"
+      mark_escalated_seen "$state" "$capture" || classification_failed=1
+      log "self-handle (landing wait): $reason -> $distilled"
+      ;;
     escalate)
       log "escalate: $reason -> $distilled"
       if escalate_add "$state" "$distilled"; then

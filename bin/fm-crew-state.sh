@@ -24,7 +24,7 @@
 # Output is one stable, parseable, token-tight line firstmate can read every
 # heartbeat:
 #
-#   state: <working|parked|done|blocked|paused|failed|unknown> · source: <run-step|pane|status-log|remote-endpoint|none> · <detail>
+#   state: <working|parked|done|blocked|paused|failed|unknown> · source: <run-step|pane|status-log|landing-wait|remote-endpoint|none> · <detail>
 #
 # Logic, in order:
 #   1. Resolve worktree + backend target + kind from state/<id>.meta. A meta
@@ -149,7 +149,8 @@
 #      when its verb maps to a recognized run-state. Decision-only events such as
 #      `resolved` never become current state or detail.
 #   5. Missing meta or torn-down worktree: report unknown · none. If no run is
-#      attributed to this crew, a dead endpoint also reports unknown · none rather
+#      attributed to this crew and no supervisor-owned landing wait explains its
+#      quiet, a dead endpoint also reports unknown · none rather
 #      than trusting a stale status log. On tmux and herdr, which own a
 #      recovery-grade classifier, only its positive death evidence reads as gone
 #      (the endpoint is authoritatively absent, or its pane holds no agent); an
@@ -205,7 +206,18 @@ SEP=' · '
 
 # Emit the one canonical line and exit 0. Detail is optional.
 emit() {  # <state> <source> [detail]
-  local line="state: $1${SEP}source: $2"
+  local line="state: $1${SEP}source: $2" landing
+  # Preserve attributed active/unverified runs. A supervisor's landing wait can
+  # explain a finished ship or an otherwise unknown idle/dead endpoint only.
+  case "$1:$2" in
+    done:*|unknown:none|unknown:pane)
+      if [ -f "$STATE/$ID.landing-wait" ] \
+        && cmp -s "$META" "$STATE/$ID.meta" && cmp -s "$LOG" "$STATE/$ID.status" \
+        && landing=$(fm_landing_wait_read "$STATE" "$ID"); then
+        line="state: parked${SEP}source: landing-wait${SEP}awaiting landing: $landing"
+      fi
+      ;;
+  esac
   [ -n "${3:-}" ] && line="$line${SEP}$3"
   printf '%s\n' "$line"
   exit 0

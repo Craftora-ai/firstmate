@@ -6,6 +6,32 @@ This record contains reusable version-scoped evidence for active runtime guarant
 The backend guides own current setup, safety boundaries, and limitations.
 Exact task chronology, branch names, temporary homes, local paths, process ids, thread ids, and delivery transcripts remain in private reports or PR evidence.
 
+## Finished ships awaiting landing
+
+The landing-wait record contract belongs to [`bin/fm-landing-wait.sh`](../../bin/fm-landing-wait.sh).
+Verified on 2026-09-30 with macOS Bash 5.3.20 and the shared watcher and daemon code:
+
+```sh
+FM_TEST_ONLY=test_landing_wait_record bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+FM_TEST_ONLY=test_landing_wait_quiets_stopped_ship bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+FM_TEST_ONLY=test_landing_wait_clear_and_busy_resume bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+FM_TEST_ONLY=test_landing_wait_daemon_and_current_state bash bin/fm-test-run.sh tests/fm-watch-triage.test.sh
+```
+
+Observed assertion output:
+
+```text
+ok - landing waits preserve done and keyed answers, bind completion and commit, and reject resumed or invalid work
+ok - finished ships stay quiet across watcher restarts and postures; answers preserve waits and failures still wake
+ok - clearing a landing wait re-arms stale monitoring and busy workers retain wedge detection
+ok - daemon preserves unseen completion and new decisions, clears obsolete wedge aging, and current state names landing waits
+```
+
+These tests execute the real watcher against fixture metadata, real Git repositories, a fake tmux transport, and the existing Pi semantic-event seam; they do not launch a vendor harness or a live runtime backend.
+The metadata reader is exercised for tmux, Herdr, Zellij, Orca, and cmux; inspection of `fm_backend_target_of_meta` keeps Orca's separate terminal identity in the binding.
+All supported primary harnesses consume the same watcher classification, and the legacy away daemon consumes the same record reader; the per-harness supervision protocols and backend busy classifiers are unchanged.
+Codex App remains outside the supported backend inventory, so no live Codex App guarantee is claimed.
+
 ## Harness detection precedence
 
 Firstmate's own harness comes from two kinds of evidence, and `bin/fm-harness.sh` owns how they combine: an environment marker names its harness, and the nearest harness process in the parent chain proves who owns the process tree.

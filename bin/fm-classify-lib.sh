@@ -355,6 +355,55 @@ status_is_paused_or_captain_held() {  # <status-line>
   status_is_paused "$line" || status_is_captain_held "$line"
 }
 
+# Firstmate's landing wait is separate from the worker's status vocabulary.
+# bin/fm-landing-wait.sh owns its record and lifecycle contract. No record costs
+# one file test; a present record must prove its bindings before it can quiet
+# an idle endpoint. These helpers never infer a dependency from sibling work.
+fm_landing_wait_binding() {  # <state> <id> -> metadata checksum TAB commit
+  local meta="$1/$2.meta" wt branch kind head clean binding
+  [ -f "$meta" ] && [ ! -L "$meta" ] || return 1
+  kind=$(sed -n 's/^kind=//p' "$meta")
+  [ "$kind" = ship ] || return 1
+  wt=$(sed -n 's/^worktree=//p' "$meta")
+  branch=$(sed -n 's/^branch=//p' "$meta")
+  [ -n "$wt" ] && [ -n "$branch" ] && [ "$branch" != HEAD ] || return 1
+  [ "$(git -C "$wt" symbolic-ref --short HEAD 2>/dev/null)" = "$branch" ] || return 1
+  head=$(git -C "$wt" rev-parse --verify HEAD 2>/dev/null) || return 1
+  clean=$(GIT_OPTIONAL_LOCKS=0 git -C "$wt" status --porcelain 2>/dev/null) || return 1
+  [ -z "$clean" ] || return 1
+  binding=$(awk '/^(kind|worktree|branch|window|terminal|backend|harness)=/' "$meta" | cksum) || return 1
+  printf '%s\t%s' "$binding" "$head"
+}
+
+fm_landing_wait_read() {  # <state> <id> [record] -> active reason, or exit 1
+  local state=$1 id=$2 record=${3:-$1/$2.landing-wait} status="$1/$2.status"
+  local version ident bytes prefix binding head reason extra line verb suffix
+  [ -f "$record" ] && [ ! -L "$record" ] || return 1
+  [ -f "$status" ] && [ ! -L "$status" ] || return 1
+  {
+    IFS=$'\t' read -r version ident bytes prefix binding head reason extra || return 1
+    [ -z "$extra" ] || return 1
+    if IFS= read -r extra || [ -n "$extra" ]; then return 1; fi
+  } < "$record"
+  [ "$version" = v1 ] && [ -n "$reason" ] && [ -z "$extra" ] || return 1
+  case "$bytes" in ''|0*|*[!0-9]*) return 1 ;; esac
+  [ "$bytes" -gt 0 ] && [ "$bytes" -le "$(LC_ALL=C wc -c < "$status")" ] || return 1
+  [ "$ident" = "$(_fm_open_decisions_file_ident "$status")" ] || return 1
+  [ "$prefix" = "$(head -c "$bytes" "$status" | cksum)" ] || return 1
+  [ "$binding"$'\t'"$head" = "$(fm_landing_wait_binding "$state" "$id")" ] || return 1
+  # Resolving a keyed decision must not erase an independent landing wait.
+  # Every other nonblank append invalidates it, even if followed by another done.
+  suffix=$(tail -c "+$((bytes + 1))" "$status") || return 1
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in *[![:space:]]*) ;; *) continue ;; esac
+    status_line_verb "$line" verb
+    [ "$verb" = "${FM_CLASSIFY_RESOLVE_VERB:-$FM_CLASSIFY_RESOLVE_VERB_DEFAULT}" ] || return 1
+  done <<EOF
+$suffix
+EOF
+  printf '%s\n' "$reason"
+}
+
 # The status line that holds a crew in a declared wait, or nothing when it is in
 # none. Supervisors decide the wait from this line, never from the raw latest
 # event: a resolved line is also how firstmate answers a decision (fm-send
@@ -2674,6 +2723,27 @@ signal_crew_provably_working() {  # <file> ...
   done
   [ -n "$seen" ] || return 1
   return 0
+}
+
+# Called only after the signal span was classified as non-actionable. A batch
+# can mix finished ships with still-working crews; each must have its own proof.
+signal_crews_landing_wait() {  # <file> ...
+  local f base dir task seen=0
+  for f in "$@"; do
+    base=${f##*/}; dir=${f%/*}
+    [ "$dir" != "$f" ] || dir=.
+    case "$base" in
+      *.status) task=${base%.status} ;;
+      *.turn-ended) task=${base%.turn-ended} ;;
+      *) return 1 ;;
+    esac
+    if fm_landing_wait_read "$dir" "$task" >/dev/null; then
+      seen=1
+    else
+      signal_crew_provably_working "$f" || return 1
+    fi
+  done
+  [ "$seen" -eq 1 ]
 }
 
 # 0 (terminal/actionable) if a stale window's latest recognized status event is
