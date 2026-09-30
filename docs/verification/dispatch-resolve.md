@@ -106,10 +106,16 @@ Antigravity publishes no account-wide scope; its windows form a `gemini` group a
 Codex names a model window by the vendor's metered feature, and `base_model_inference` has no published relation to a model id, so `quota_model_scopes` leaves it unmatched rather than guessing.
 
 ```console
-$ quota-axi --json | jq -c '.providers[] | select(.provider == "claude" or .provider == "agy" or .provider == "codex") | [.provider, [.quotaSemantics.effectiveAvailability[].scope]]'
-["claude",["all_models","model:fable"]]
+$ quota-axi --json | jq -c '.providers[] | select(.provider == "agy" or .provider == "codex") | [.provider, [.quotaSemantics.effectiveAvailability[].scope]]'
 ["codex",["all_models","model:base_model_inference"]]
 ["agy",["gemini","claude_gpt"]]
+```
+
+Illustrative incident snapshot, not a live result: the scope names quota-axi publishes for Claude.
+At capture the live Claude row was unmeasured (status unknown, no percentages), so the `model:fable` family naming is established from the quota-axi 0.1.55 provider source rather than from a measured live Claude row.
+
+```text
+["claude",["all_models","model:fable"]]
 ```
 
 ## Offline behavior
