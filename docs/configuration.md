@@ -1408,10 +1408,11 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 **Repeat reporting and inheritance**
 
 - The check prints nothing when everything is current.
-- `state/.tool-updates` remembers each reported finding by its tool, the source that found it, and its condition, never by its text, so the same pending update is reported once instead of on every poll.
+- `state/.tool-updates` remembers each reported finding by its identity, never by its text, so the same pending update is reported once instead of on every poll.
+- An available update is remembered by its tool alone, whichever source found it, so a second source (the announcement, the published release, or the git remote) confirming the same pending update is not news; any other finding is remembered by its tool, the source that found it, and its condition.
 - Detail that moves on its own is therefore not news: an upstream branch gaining commits while the clone stays behind, or a newer release while an update is still pending, is not reported again.
 - A tool going from current to behind, or a tool joining the list, is news, and so is a condition that cleared and returned.
-- A source that reached no answer on a sweep (a timed-out probe, an unreachable remote, a tool the sweep had to stop waiting for) keeps what was recorded for it, so a transient failure never makes an already reported update news again.
+- A source that reached no answer on a sweep (a timed-out probe, an unreachable remote, a tool the sweep had to stop waiting for) keeps what was recorded for it, so a transient failure never makes an already reported update news again; a recorded update is forgotten only once every source of the tool that can report one answered and none reported it.
 - A check failure and an unfinished sweep are remembered apart from updates and are news again only after a whole day without them, so a source that flips between answering and not is reported once rather than on every flip.
 - When anything is news, the report line lists the news first and then, after `already reported:`, whatever else still needs attention.
 - Adding, removing, or changing a watched tool is an edit to this file and needs no code change or re-arming.

@@ -77,8 +77,10 @@
 # refused outright.
 #
 # The report record state/.tool-updates remembers what was reported by the
-# identity of each finding - its tool, the source that found it, and the
-# condition - never by its text. The text carries detail that moves on its own
+# identity of each finding, never by its text. An available update is identified
+# by its tool alone, whichever source found it, so a second source confirming the
+# same pending update is not news; any other finding by its tool, the source that
+# found it, and the condition. The text carries detail that moves on its own
 # (the upstream tip, how many commits behind, the newest published version), and
 # none of that is news: a tool going from current to behind is, and so is a tool
 # joining the list. Three rules keep one pending update from being reported over
@@ -87,7 +89,9 @@
 #   - A source that reached no answer this sweep (a probe that timed out, a
 #     remote that could not be read, a worker the deadline cut off) keeps what
 #     was recorded for it, so a transient failure never clears the memory of an
-#     update already reported.
+#     update already reported. A recorded update is dropped only once every
+#     source of the tool that can report one (announce, published, git) answered
+#     and none reported it.
 #   - A check failure and an unfinished sweep describe that probe or that sweep,
 #     not the tool, so they are remembered apart from updates and are only news
 #     again once absent for FAILURE_QUIET_SECS. A source that flips between
@@ -238,8 +242,9 @@ DEADLINE=0
 # sources are command (the copies on PATH), announce (the tool's own update
 # announcement), published (a registry or release page), and git (a clone
 # against its remote); a finding about the sweep itself has an empty tool and the
-# source sweep. The conditions are available, not-in-effect, and failed for a
-# tool, and incomplete, budget-cut, registry, and failed for the sweep.
+# source sweep. The conditions are not-in-effect and failed for a tool, and
+# incomplete, budget-cut, registry, and failed for the sweep. An available update
+# is identified as <tool>/available, whichever source found it.
 #
 # A worker writes to its own output file, one line per finding and one line per
 # source that reached an answer:
@@ -254,10 +259,18 @@ DEADLINE=0
 WORKER_TOOL=
 WORKER_PROBE_SECS=$PROBE_SECS
 
+finding_key() {
+  local text
+  text=$(printf '%s' "$2" | tr '\t\r\n' '   ')
+  printf 'F\t%s\t%s\n' "$1" "$text"
+}
+
 finding() {
-  local source=$1 condition=$2 text
-  text=$(printf '%s' "$3" | tr '\t\r\n' '   ')
-  printf 'F\t%s/%s/%s\t%s\n' "$WORKER_TOOL" "$source" "$condition" "$text"
+  finding_key "$WORKER_TOOL/$1/$2" "$3"
+}
+
+update_available() {
+  finding_key "$WORKER_TOOL/available" "$1"
 }
 
 answered() {
@@ -561,7 +574,7 @@ EOF
         # naming a version already installed is not an available update.
         if [ -z "$announced_version" ] || [ -z "$best_version" ] \
           || version_newer "$announced_version" "$best_version"; then
-          finding announce available "$name update available: $matched_line"
+          update_available "$name update available: $matched_line"
         fi
       elif fm_timed_out "$announce_status"; then
         # A source that was asked and never answered is not a source that had
@@ -696,7 +709,7 @@ published_findings() {
   answered published
   version=${version#v}
   if version_newer "$version" "$installed"; then
-    finding published available "$name update available: installed $installed, published $version at $url"
+    update_available "$name update available: installed $installed, published $version at $url"
   fi
 }
 
@@ -838,13 +851,13 @@ git_findings() {
     esac
     if [ -n "$count" ]; then
       answered git
-      finding git available "$name update available: $local_label is $(commit_phrase "$count") behind $remote/$branch"
+      update_available "$name update available: $local_label is $(commit_phrase "$count") behind $remote/$branch"
       return 0
     fi
   fi
 
   answered git
-  finding git available "$name update available: $remote/$branch is at $short which this copy does not have"
+  update_available "$name update available: $remote/$branch is at $short which this copy does not have"
   return 0
 }
 
@@ -1038,6 +1051,18 @@ source_answered() {
   ! current_has "$1/failed"
 }
 
+# True when a source of <tool> that can report an available update is configured
+# and reached no answer this sweep.
+update_source_unanswered() {
+  local source
+  for source in announce published git; do
+    case "$CONFIGURED" in
+      *" $1/$source "*) source_answered "$1/$source" || return 0 ;;
+    esac
+  done
+  return 1
+}
+
 # The next record: every key found now, plus each recorded key the rules in the
 # header keep.
 next_record() {
@@ -1064,6 +1089,9 @@ EOF
         ;;
       /sweep/*)
         continue
+        ;;
+      */available)
+        [ "$CARRY_ALL" -eq 1 ] || update_source_unanswered "${key%/available}" || continue
         ;;
       *)
         if [ "$CARRY_ALL" -ne 1 ]; then

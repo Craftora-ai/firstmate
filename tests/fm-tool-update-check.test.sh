@@ -999,14 +999,15 @@ test_published_dedupe_and_composition() {
   [ ! -s "$out" ] || fail "same published condition was reported twice"
   printf '%s\n' '{"version":"0.8.3"}' > "$home/response"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  [ ! -s "$out" ] || fail "a published release confirming the announced update was news: $(cat "$out")"
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   assert_contains "$(cat "$out")" 'update available: installed 0.8.2, published 0.8.3' "published source did not compare the newest installed copy"
   printf '%s\n' '{"version":"0.8.0"}' > "$home/response"
+  rm -f "$home/state/.tool-updates"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   assert_not_contains "$(cat "$out")" 'published 0.8.0' "current source reported an update"
-  printf '%s\n' '{"version":"0.8.3"}' > "$home/response"
-  run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
-  assert_contains "$(cat "$out")" 'published 0.8.3' "returning published update was suppressed"
-  pass "published sources compose with PATH skew, announcements and git, with changed and returning update dedupe"
+  pass "published sources compose with PATH skew, announcements and git, and confirming one pending update is not news"
 }
 
 test_published_numeric_comparison_and_failed_installed_command() {
@@ -1334,6 +1335,45 @@ SH
   run_check "$home" "$(fixture_path "$dir")" "$out" FM_ANNOUNCE_MODE=news
   assert_contains "$(cat "$out")" "no-mistakes update available: A new version of no-mistakes is available: v1.46.0 -> v1.53.0" "an announcement from a command that also exited non-zero was lost"
   pass "an announcement command that fails without announcing is a check failure, not silence"
+}
+
+test_a_second_source_confirming_a_reported_update_is_not_news() {
+  local home dir out
+  # The 2026-09-23 shape seen from both of no-mistakes' sources: while a firewall
+  # rule blocked its own update request, the GitHub release reported the pending
+  # update. Once the block lifted, the announcement named that same update, and
+  # a tool that stayed behind is not news.
+  home=$(make_home two-sources)
+  dir="$home/bin"
+  make_release_transport "$dir"
+  cat > "$dir/no-mistakes-fixture" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'no-mistakes version v1.75.2\n'
+  exit 0
+fi
+case "${FM_ANNOUNCE_MODE:-}" in
+  blocked) printf 'error: dial tcp: connection refused\n' >&2; exit 1 ;;
+  news) printf 'A new version of no-mistakes is available: v1.75.2 -> v1.79.0\n' >&2; exit 0 ;;
+esac
+printf 'up to date\n'
+SH
+  chmod 0755 "$dir/no-mistakes-fixture"
+  write_config "$home" '{"tools":[{"name":"no-mistakes","command":"no-mistakes-fixture","version_args":["--version"],"announce_args":["update","--check"],"announce_pattern":"A new version of no-mistakes is available: [^ ]+ -> [^ ]+","published":{"source":"github","repo":"kunchenguid/no-mistakes"}}]}'
+  printf '%s\n' '{"tag_name":"v1.79.0"}' > "$home/response"
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_ANNOUNCE_MODE=blocked FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "no-mistakes update available: installed 1.75.2, published 1.79.0" "the published release did not report the pending update"
+  assert_contains "$(cat "$out")" "no-mistakes check failed:" "the blocked announcement was not reported as a check failure"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_ANNOUNCE_MODE=news FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  [ ! -s "$out" ] || fail "the announcement of an already reported update was news: $(cat "$out")"
+  # Every source answering with no update clears it, so falling behind again is news.
+  printf '%s\n' '{"tag_name":"v1.75.2"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  [ ! -s "$out" ] || fail "a tool every source reports current still reported: $(cat "$out")"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_ANNOUNCE_MODE=news FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "no-mistakes update available: A new version of no-mistakes is available" "an update after every source answered current was not news"
+  pass "a second source confirming an already reported update is not news"
 }
 
 # --- registry and reporting contract ----------------------------------------
@@ -1772,6 +1812,7 @@ test_an_unfinished_tool_is_named_and_a_flip_is_not_news
 test_a_tool_probe_secs_gives_a_slow_tool_its_own_bound
 test_npm_packages_outside_path_are_compared_with_the_registry
 test_an_announcement_command_that_fails_is_a_check_failure
+test_a_second_source_confirming_a_reported_update_is_not_news
 test_absent_registry_is_silent
 test_malformed_registry_is_reported_not_ignored
 test_findings_are_reported_once_until_their_condition_changes
