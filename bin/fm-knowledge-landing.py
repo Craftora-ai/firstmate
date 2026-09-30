@@ -1,12 +1,14 @@
 #!/usr/bin/env python3
 """Knowledge-check protocol for fm-merge-local.sh's protected vault landing.
 
-Usage: python3 fm-knowledge-landing.py <project> <base-oid> <head-oid> <approval>
+Usage: python3 -I fm-knowledge-landing.py <project> <base-oid> <head-oid> <approval>
 The caller pins both commits, checks ancestry and cleanliness, and merges only
 head-oid after success. This helper never merges or grants merge authority.
 It runs the current clean checkout's
 06 AI Team/AI Team Knowledge/Scripts/check-knowledge-landing.py with
 <base-oid> <head-oid> --root <project>, with a 90-second deadline.
+Both interpreters use isolated mode so inherited Python startup customization
+cannot replace the verdict. Failed verdicts retain checker output for diagnosis.
 
 A complete verdict must name the requested base, head and merge-base (base,
 because this entrypoint only fast-forwards). Exit 0 plus a recognized final OK
@@ -60,7 +62,7 @@ def main(args):
     if not gate.is_file() or gate.is_symlink():
         raise ValueError("knowledge checker is missing or is not a regular file")
     result = subprocess.run(
-        [sys.executable, "-B", str(gate), base, head, "--root", project],
+        [sys.executable, "-I", "-B", str(gate), base, head, "--root", project],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE, timeout=90,
     )
     output = result.stdout.decode("utf-8", "strict")
@@ -68,6 +70,7 @@ def main(args):
     header = HEADER.fullmatch(lines[0]) if lines else None
     if (header is None or header.groups() != (base, head, base)
             or any(line.startswith("ERROR") for line in lines)):
+        sys.stderr.write(output + result.stderr.decode("utf-8", "replace"))
         raise ValueError("knowledge checker returned an incomplete, failed or mismatched verdict")
     failures = [line for line in lines if line.startswith("FAIL ")]
     if result.returncode == 0 and lines[-1].startswith(OK) and not failures:
@@ -79,6 +82,7 @@ def main(args):
             print("knowledge landing: explicit approval matches " + head)
             return 0
         raise ValueError("knowledge landing requires explicit approval of " + head + " in " + approval)
+    sys.stderr.write(output + result.stderr.decode("utf-8", "replace"))
     raise ValueError("knowledge checker did not return a complete pass or policy refusal")
 
 

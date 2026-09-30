@@ -73,8 +73,8 @@ run_lifecycle() {
     printf 'resolved: [key=pick-one]  chose a\n'
     printf 'partial line without its newline'
   } >> "$HOME_DIR/state/$TASK.status"
-  # Startup and the first status poll need room on a loaded host; the queued
-  # signal returns early, so this is a deadline rather than a fixed delay.
+  # Startup and the first status poll need room on a loaded host. These already
+  # resolved status lines produce no wake, so a quiet checkpoint uses the bound.
   out=$(in_home env FM_POLL=1 FM_SIGNAL_GRACE=1 FM_CHECK_INTERVAL=999999 \
     "$ROOT/bin/fm-watch-checkpoint.sh" --seconds 30 2>&1)
   case "$out" in *"checkpoint:"*|*"signal:"*) ;; *) fail "watcher checkpoint did not run: $out" ;; esac

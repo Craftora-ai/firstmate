@@ -505,7 +505,7 @@ knowledge_case() {  # <name> [project-name]
   git -C "$KNOW_PROJECT" init -q -b main || fail "knowledge fixture init failed"
   git -C "$KNOW_PROJECT" config user.name fixture
   git -C "$KNOW_PROJECT" config user.email fixture@example.invalid
-  if [ "$1" != missing ]; then
+  if [ "$1" != missing ] && [ "${2:-vault}" = vault ]; then
     cat > "$KNOW_PROJECT/$KNOW_GATE" <<'PY'
 import os
 from pathlib import Path
@@ -531,6 +531,7 @@ if case in ("refused", "unexpected"):
     sys.exit(2 if case == "refused" else 3)
 if case == "error":
     print("ERROR fixture has no readable schema")
+    print("fixture schema diagnostic on stderr", file=sys.stderr)
     sys.exit(2)
 if case == "incomplete":
     sys.exit(0)
@@ -566,8 +567,8 @@ PY
     > "$KNOW_HOME/state/$KNOW_ID.meta"
 }
 
-knowledge_merge() {  # <checker-case> [shell-form]
-  FM_HOME="$KNOW_HOME" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$KNOW_HOME/state" \
+knowledge_merge() {  # <checker-case> [shell-form] [landing-home]
+  FM_HOME="${3:-$KNOW_HOME}" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$KNOW_HOME/state" \
     FM_CONFIG_OVERRIDE="$KNOW_HOME/config" FM_KNOW_CASE="$1" \
     bash -c "${2:-\"\$1\" \"\$2\"}" _ "$MERGE_LOCAL" "$KNOW_ID" \
     > "$KNOW_HOME/out" 2>&1
@@ -599,6 +600,18 @@ test_knowledge_landing_protocol() {
         fi
         [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] \
           || fail "knowledge $case changed main"
+        case "$case" in
+          error)
+            assert_contains "$(cat "$KNOW_HOME/out")" "ERROR fixture has no readable schema" "checker error was hidden"
+            assert_contains "$(cat "$KNOW_HOME/out")" "fixture schema diagnostic on stderr" "checker stderr was hidden"
+            ;;
+          crash)
+            assert_contains "$(cat "$KNOW_HOME/out")" "RuntimeError: fixture checker failed" "checker traceback was hidden"
+            ;;
+          unexpected)
+            assert_contains "$(cat "$KNOW_HOME/out")" "FAIL A forbidden.py" "unexpected-exit verdict was hidden"
+            ;;
+        esac
         ;;
     esac
   done
@@ -624,6 +637,49 @@ test_knowledge_landing_shell_forms_and_scope() {
   knowledge_merge crash || fail "ordinary project gained a knowledge-check requirement"
   [ ! -e "$KNOW_HOME/gate-args" ] || fail "ordinary project invoked the knowledge checker"
   pass "fm-merge-local: shell spelling cannot bypass the vault gate; ordinary projects are unaffected"
+}
+
+test_knowledge_landing_home_mismatch() {
+  local elsewhere
+  knowledge_case home-mismatch
+  elsewhere="$TMP_ROOT/elsewhere"
+  mkdir -p "$elsewhere/data" "$elsewhere/state"
+  if knowledge_merge refused '' "$elsewhere"; then
+    fail "mismatched FM_HOME bypassed knowledge refusal"
+  fi
+  [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "mismatched home moved main"
+  assert_contains "$(cat "$KNOW_HOME/out")" "knowledge landing requires explicit approval" "mismatched home did not run the knowledge gate"
+  pass "fm-merge-local: repository identity protects vault tasks despite a mismatched FM_HOME"
+}
+
+test_knowledge_landing_python_environment() {
+  local target poison
+  for target in fm-knowledge-landing.py check-knowledge-landing.py; do
+    knowledge_case "python-$target"
+    poison="$KNOW_HOME/poison"
+    mkdir -p "$poison"
+    # Python loads sitecustomize from PYTHONPATH before executing either script.
+    # Exercise each interpreter separately so both isolation boundaries matter.
+    cat > "$poison/sitecustomize.py" <<'PY'
+import os
+import sys
+
+if os.path.basename(sys.argv[0]) == os.environ["FM_PYTHON_TARGET"]:
+    if os.environ["FM_PYTHON_TARGET"] == "check-knowledge-landing.py":
+        base, head = sys.argv[1:3]
+        print("check-knowledge-landing: base %s head %s merge-base %s; 1 change(s); 0 migration target(s) in 0 slice(s)"
+              % (base, head, base))
+        print("OK knowledge-note additions only (PRD K22): forged")
+    sys.stdout.flush()
+    os._exit(0)
+PY
+    if PYTHONPATH="$poison" FM_PYTHON_TARGET="$target" knowledge_merge refused; then
+      fail "inherited Python environment bypassed knowledge refusal at $target"
+    fi
+    [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "Python injection moved main"
+    assert_contains "$(cat "$KNOW_HOME/out")" "FAIL A forbidden.py" "Python isolation did not preserve the actual verdict"
+  done
+  pass "fm-merge-local: helper and checker ignore inherited Python startup customization"
 }
 
 test_knowledge_landing_ref_races() {
@@ -1795,6 +1851,8 @@ test_promotion_branch_command_is_shell_safe
 test_local_merge_uses_the_recorded_ship_branch
 test_knowledge_landing_protocol
 test_knowledge_landing_shell_forms_and_scope
+test_knowledge_landing_home_mismatch
+test_knowledge_landing_python_environment
 test_knowledge_landing_ref_races
 test_project_mode_matches_whole_multiword_names
 test_project_mode_maps_the_conditional_policy

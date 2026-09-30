@@ -19,9 +19,10 @@
 # The base and ship commits are captured once; validation and the fast-forward
 # use those full object IDs, never a mutable ship ref. Ref/checkout changes
 # during validation refuse before the merge, and the resulting tip is verified.
-# For the home vault (FM_HOME/projects/vault, including aliases sharing its Git
-# common directory), fm-knowledge-landing.py enforces the knowledge check before
-# landing. Its header owns the checker/approval protocol. Other projects keep
+# For repositories carrying the knowledge checker in the captured base, and
+# the home vault (FM_HOME/projects/vault, including aliases sharing its Git
+# common directory), fm-knowledge-landing.py enforces the check before landing.
+# Its header owns the checker/approval protocol. Other projects keep
 # their existing approval path. These locks coordinate this entrypoint, not
 # arbitrary external Git writers; pause other checkout writers before landing.
 # Usage: fm-merge-local.sh <task-id>
@@ -150,12 +151,16 @@ if ! git -C "$PROJ" merge-base --is-ancestor "$base" "$head"; then
   exit 1
 fi
 
-if [ -d "$FM_HOME/projects/vault" ]; then
+knowledge_landing=no
+if git -C "$PROJ" cat-file -e "$base:06 AI Team/AI Team Knowledge/Scripts/check-knowledge-landing.py" 2>/dev/null; then
+  knowledge_landing=yes
+elif [ -d "$FM_HOME/projects/vault" ]; then
   VAULT_COMMON=$(common_directory "$FM_HOME/projects/vault") || exit 1
-  if [ "$PROJECT_COMMON" = "$VAULT_COMMON" ]; then
-    python3 "$SCRIPT_DIR/fm-knowledge-landing.py" "$PROJ" "$base" "$head" \
-      "$FM_HOME/data/jev/knowledge-landing-approvals/$ID" || exit 1
-  fi
+  [ "$PROJECT_COMMON" != "$VAULT_COMMON" ] || knowledge_landing=yes
+fi
+if [ "$knowledge_landing" = yes ]; then
+  python3 -I "$SCRIPT_DIR/fm-knowledge-landing.py" "$PROJ" "$base" "$head" \
+    "$FM_HOME/data/jev/knowledge-landing-approvals/$ID" || exit 1
 fi
 
 hold_status=0
