@@ -1,0 +1,38 @@
+===== S2b BEFORE (base): exhausted Fable window vs Codex - silent outright selection
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 21   tokens: 100/60
+  rule: rule_1 (Vault audit work.)   confidence: 0.99
+  probabilities: rule_1=0.99 default=0.01
+  note: rule matched
+  candidate: claude:claude-fable-5-1  provider=claude  scope=all_models  remaining=79%  spendPriority=0.62  runway=through_reset  -> eligible
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=54%  spendPriority=0.4294  runway=through_reset  -> eligible
+  profile: --harness 'claude' --model 'claude-fable-5-1' --effort 'xhigh'
+(exit 0)
+===== S2b AFTER (HEAD): exhausted Fable window vs Codex
+dispatch-resolve:
+  status: clear
+  model: jev-1.13.0   latency_ms: 32   tokens: 100/60
+  rule: rule_1 (Vault audit work.)   confidence: 0.99
+  probabilities: rule_1=0.99 default=0.01
+  note: rule matched
+  candidate: claude:claude-fable-5-1  provider=claude  scope=model:fable  remaining=0%  spendPriority=-  runway=exhausted_now  bounds=all_models:79%/through_reset,model:fable:0%/exhausted_now  -> not eligible: runway exhausted_now at model:fable
+  candidate: codex:gpt-5.5  provider=codex  scope=all_models  remaining=54%  spendPriority=0.4294  runway=through_reset  -> eligible
+  profile: --harness 'codex' --model 'gpt-5.5' --effort 'high'
+(exit 0)
+===== S4: quota_model_scopes for every harness/model id in docs/examples/crew-dispatch.json and the intent's ids
+claude:claude-fable-5-1  ->  ["model:claude-fable-5-1","product:claude-fable-5-1","model:fable"]
+claude:fable  ->  ["model:fable","product:fable"]
+claude:claude-opus-5-5  ->  ["model:claude-opus-5-5","product:claude-opus-5-5","model:opus"]
+claude:opus  ->  ["model:opus","product:opus"]
+claude:haiku  ->  ["model:haiku","product:haiku"]
+claude:claude-sonnet-5  ->  ["model:claude-sonnet-5","product:claude-sonnet-5","model:sonnet"]
+claude:anthropic/claude-sonnet-5  ->  ["model:claude-sonnet-5","product:claude-sonnet-5","model:sonnet"]
+claude:anthropic/claude-fable-5-1[1m]  ->  ["model:claude-fable-5-1","product:claude-fable-5-1","model:fable"]
+claude:default  ->  []
+claude:<omitted>  ->  []
+codex:gpt-5.5  ->  ["model:gpt-5.5","product:gpt-5.5"]
+agy:gemini-3.1-pro-high  ->  ["model:gemini-3.1-pro-high","product:gemini-3.1-pro-high","gemini"]
+agy:claude-sonnet-4-5  ->  ["model:claude-sonnet-4-5","product:claude-sonnet-4-5","claude_gpt"]
+grok:<omitted>  ->  []
+live quota-axi scopes: [["claude",[]],["codex",["all_models","model:base_model_inference"]],["agy",["gemini","claude_gpt"]]]
