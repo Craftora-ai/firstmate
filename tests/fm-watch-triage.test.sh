@@ -4117,6 +4117,96 @@ test_stale_churn_without_a_captain_call_still_alarms() {
   pass "a stale window with no open captain call keeps alarming on every new hash"
 }
 
+# --- the crew's own unanswered question: pane churn must not re-alarm -------
+# The status-side record of the same wait. A scout that raised `needs-decision`
+# for a captain board stopped by contract and sits idle, but its pane still
+# repaints (statusline, clock), and with no backlog hold every new hash was a
+# fresh `stale:` wake: each one cost main a turn, and every main turn visibly
+# moves the captain's fullscreen transcript, so a few such scouts kept the
+# primary pane jumping (2026-09-30). Pinned in both directions: while the
+# question stays open the first sight alarms, churn of the SAME status-log state
+# is absorbed, the window's end alarms once more, and a new status event alarms
+# at its own first sight; a question already answered bounds nothing.
+test_open_needs_decision_bounds_stale_churn() {
+  local spec name line dir state out capture throttle wakes
+  command -v tasks-axi >/dev/null 2>&1 \
+    || { echo "skip: tasks-axi not found (open needs-decision stale bound)"; return 0; }
+  for spec in \
+    'open-question|needs-decision [key=board-review]: board ready, 7 decision cards' \
+    'question-after-progress|working: board built'$'\n''needs-decision [key=board-round-2]: two more cards to answer'
+  do
+    name=${spec%%|*}; line=${spec#*|}
+    dir=$(make_hold_home "$name" "$line" nohold) \
+      || fail "[$name] could not build an unheld open-question fixture"
+    state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
+    throttle="$state/.paused-resurfaced-$(hold_key)"
+
+    hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 1s' \
+      || fail "[$name] first sight of an open question did not surface"
+    wakes=$(hold_stale_wakes "$state")
+    [ "$wakes" -eq 1 ] || fail "[$name] first sight produced $wakes wakes instead of one"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the first surface"
+
+    hold_watch_churn "$dir" "$out" "$capture" 'idle, tick' 2 \
+      || fail "[$name] watcher exited during pane churn instead of supervising through it: $(cat "$out")"
+    wakes=$(hold_stale_wakes "$state")
+    [ "$wakes" -eq 0 ] \
+      || fail "[$name] pane churn re-alarmed an open question $wakes time(s) inside the re-surface window"
+    grep -q 'absorbed stale (unanswered needs-decision already surfaced for this status)' \
+      "$state/.watch-triage.log" \
+      || fail "[$name] the absorbed churn was not attributed to the open question"
+
+    [ -e "$throttle" ] || fail "[$name] the first alarm recorded no re-surface cadence to elapse"
+    set_mtime "$(( $(date +%s) - 5000 ))" "$throttle"
+    hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 9s' \
+      || fail "[$name] an open question did not re-surface once its re-surface window elapsed"
+    wakes=$(hold_stale_wakes "$state")
+    [ "$wakes" -eq 1 ] \
+      || fail "[$name] elapsed re-surface window produced $wakes wakes instead of one"
+    ack_stopped_cycle "$state" || fail "[$name] could not acknowledge the re-surface"
+
+    # A new status event is new information: its first sight alarms even while
+    # the question stays open and the previous window has not elapsed.
+    printf '%s\n' 'blocked: cannot reach the board host' >> "$state/held-merge.status"
+    printf '%s' "$(seen_sig "$state/held-merge.status")" > "$state/.seen-held-merge_status"
+    hold_watch_surface "$dir" "$out" "$capture" 'idle, elapsed 12s' \
+      || fail "[$name] a new status event behind an open question did not surface"
+    wakes=$(hold_stale_wakes "$state")
+    [ "$wakes" -eq 1 ] \
+      || fail "[$name] a new status event produced $wakes wakes instead of one"
+  done
+  pass "an open needs-decision surfaces once, absorbs pane churn, re-surfaces when the window elapses, and yields to a new status event"
+}
+
+# A question that is no longer open bounds nothing: one answered with its key,
+# and one a later `done:` closed (the classifier's terminal rule for a ship or
+# scout), both leave an ordinary unheld delivery that keeps alarming on every
+# new hash.
+test_closed_needs_decision_does_not_bound_stale_churn() {
+  local spec name line dir state out capture round wakes
+  command -v tasks-axi >/dev/null 2>&1 \
+    || { echo "skip: tasks-axi not found (closed needs-decision stale alarm)"; return 0; }
+  for spec in \
+    'answered-question|needs-decision [key=board-review]: board ready'$'\n''resolved [key=board-review]: answered on the board'$'\n''done: delivered after the answer' \
+    'delivery-after-question|needs-decision [key=board-round-11]: record the answer on the follow-up'$'\n''done: summary refreshed; answers for firstmate to record'
+  do
+    name=${spec%%|*}; line=${spec#*|}
+    dir=$(make_hold_home "$name" "$line" nohold) \
+      || fail "[$name] could not build a closed-question fixture"
+    state="$dir/state"; out="$dir/watch.out"; capture="$dir/pane.txt"
+    round=1
+    while [ "$round" -le 2 ]; do
+      hold_watch_surface "$dir" "$out" "$capture" "idle, elapsed ${round}s" \
+        || fail "[$name] a delivery after a closed question stopped alarming on round $round"
+      wakes=$(hold_stale_wakes "$state")
+      [ "$wakes" -eq 1 ] || fail "[$name] round $round produced $wakes wakes instead of one"
+      ack_stopped_cycle "$state" || fail "[$name] could not acknowledge round $round"
+      round=$((round + 1))
+    done
+  done
+  pass "a delivery after a closed needs-decision keeps alarming on every new hash"
+}
+
 
 # The cadence marker may never outlive the wake it claims to record. Recording it
 # before publishing the durable wake turned a delayed alarm into a lost one: the
@@ -6712,6 +6802,8 @@ test_wedge_threshold_parked_gate_is_off_until_armed
 test_wedge_defer_refuses_a_half_filled_wait_record
 test_open_captain_call_bounds_stale_churn
 test_stale_churn_without_a_captain_call_still_alarms
+test_open_needs_decision_bounds_stale_churn
+test_closed_needs_decision_does_not_bound_stale_churn
 test_failed_wake_append_does_not_arm_the_captain_hold_throttle
 test_reheld_captain_call_starts_its_own_resurface_window
 test_secondmate_paused_resurfaces_in_normal_mode

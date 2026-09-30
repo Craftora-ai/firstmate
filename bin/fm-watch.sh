@@ -32,7 +32,11 @@
 #                          human the wait is on. Only when neither absorb class
 #                          applies does the log's latest recognized status event decide:
 #                          terminal (captain-relevant) or non-terminal (no verb),
-#                          both surfaced at once. A provably-working stale past the
+#                          both surfaced at once. A terminal one whose work the
+#                          backlog holds for the captain, or whose own log still
+#                          holds an unanswered needs-decision, alarms again on a
+#                          new pane hash of the same status-log state only once
+#                          per that long cadence. A provably-working stale past the
 #                          wedge threshold also surfaces, with an "escalation N"
 #                          count in the reason; at FM_WEDGE_DEMAND_INSPECT_COUNT
 #                          consecutive escalations on the SAME pane, the reason
@@ -1833,7 +1837,8 @@ stale_wait_throttled() {  # <window-key> <declaration>
 # they are already holding has nothing new to say on the next pane tick.
 # Sets STALE_WAIT_DECLARATION to the scope this sighting is bound to, and leaves
 # it EMPTY when no open captain call bounds it, so an unheld delivery, a blocker,
-# and a failure alarm exactly as they do today.
+# and a failure alarm exactly as they do today unless the crew's own unanswered
+# question bounds them (decision_wait_stale_bound below).
 # Returns 0 to absorb this sighting; 1 to alarm, after which the caller records
 # the throttle through stale_wait_record once its own wake append has succeeded.
 # Record a fired wake against the bounded cadence, and ONLY after that wake was
@@ -1858,6 +1863,25 @@ captain_call_stale_bound() {  # <window-key> <task>
   task_captain_call_open "$task" || return 1
   STALE_WAIT_DECLARATION=$(captain_call_declaration "$task" "$CAPTAIN_CALL_IDENTITY")
   away_record_present && return 0
+  stale_wait_throttled "$key" "$STALE_WAIT_DECLARATION"
+}
+
+# The status-side twin of that bound, for a captain-relevant stale window no
+# captain call bounds: the crew's own status log still holds an unanswered
+# needs-decision (status_has_open_needs_decision owns what counts as open). The
+# worker stopped by contract to wait for that answer, and the wake drain's OPEN
+# DECISIONS section presents the record on every drain, so a new hash of its
+# idle pane - a statusline or clock repaint - has nothing new to say, while each
+# such alarm still costs main a turn. The cadence and first-sight rule are the
+# captain call's; the scope is the task's whole status-log signature, so any new
+# status event alarms at its own first sight, and one that closes the question
+# (its resolved line, or a later done or failed from a ship or scout) ends the
+# bound. A captain call that already set a declaration keeps it.
+decision_wait_stale_bound() {  # <window-key> <task>
+  local key=$1 task=$2
+  [ -z "$STALE_WAIT_DECLARATION" ] || return 1
+  status_has_open_needs_decision "$STATE/$task.status" || return 1
+  STALE_WAIT_DECLARATION=$(stale_wait_declaration "$task")
   stale_wait_throttled "$key" "$STALE_WAIT_DECLARATION"
 }
 
@@ -3048,18 +3072,24 @@ EOF
               date +%s > "$ssf"
               clear_write_tracking "$key"
               triage_log "absorbed stale (provably working, overriding a stale captain-relevant status): $w"
-            elif captain_call_stale_bound "$key" "$task"; then
+            elif captain_call_stale_bound "$key" "$task" \
+              || decision_wait_stale_bound "$key" "$task"; then
               # The line is captain-relevant and stays so, but the backlog says
-              # the captain already holds this work: further NEW pane hashes with
-              # the same status-log state have nothing to add while they are
-              # deciding. Only that new-hash repetition is bounded - the first
+              # the captain already holds this work, or the crew's own log still
+              # holds its unanswered question: further NEW pane hashes with the
+              # same status-log state have nothing to add while that is decided.
+              # Only that new-hash repetition is bounded - the first
               # sight already alarmed, a new hash inside the window is absorbed,
               # and a new hash after it alarms again. A stable hash stays as inert
               # here as it already was after a first terminal alarm.
               printf '%s' "$h" > "$sf"
               rm -f "$ssf"
               clear_write_tracking "$key"
-              triage_log "absorbed stale (open captain call already surfaced for this status): $w"
+              if [ -n "$CAPTAIN_CALL_IDENTITY" ]; then
+                triage_log "absorbed stale (open captain call already surfaced for this status): $w"
+              else
+                triage_log "absorbed stale (unanswered needs-decision already surfaced for this status): $w"
+              fi
             else
               fm_wake_append stale "$w" "stale: $w" || exit 1
               stale_wait_record "$key"
