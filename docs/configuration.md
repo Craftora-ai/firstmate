@@ -1339,9 +1339,11 @@ This section is the single owner of the canonical schema.
       "version_args": ["<optional args that make it print its version, default --version>"],
       "announce_pattern": "<optional extended regex matching the tool's own update announcement>",
       "announce_args": ["<optional args for the command that carries that announcement, default version_args>"],
+      "probe_secs": "<optional whole number 1..30 bounding each of this tool's probes, default FM_TOOL_UPDATE_PROBE_SECS>",
       "published": {
         "source": "npm",
-        "package": "<npm package name, including an optional @scope/>"
+        "package": "<npm package name, including an optional @scope/>",
+        "installed": { "npm_dir": "<optional absolute path of a folder whose node_modules holds the package>" }
       },
       "git": {
         "repo": "<optional absolute path to a local clone>",
@@ -1355,12 +1357,15 @@ This section is the single owner of the canonical schema.
 
 **Entry fields and probe behavior**
 
-- Each entry needs a unique non-empty `name` and at least one of `command` or `git`; an entry may carry both.
-- A `published` probe also requires `command` to supply the installed version; it can accompany `git` and an announcement on the same entry.
+- Each entry needs a unique non-empty `name` and at least one of `command`, `git`, or a `published` source with its own `installed` version; an entry may carry several.
+- A `published` probe takes its installed version from `command` unless `published.installed` names another place; it can accompany `git` and an announcement on the same entry.
+- `probe_secs` gives one tool its own probe bound, for a tool that is slow to answer on a loaded host, without raising the bound for every other tool.
 - A `command` entry gives the `PATH` comparison above, and adding `announce_pattern` also reads the tool's own update announcement, which is how a tool that already reports its own updates is read rather than reimplemented.
 - The announcement counts as `update available` only when the version it names is newer than the newest installed copy found; a version already installed is reported only as `update not in effect`, so one completed install does not report both in the same sweep. An announcement naming no readable version is reported as an available update as before.
 - A tool does not always announce a new release on the command that prints its version: `no-mistakes --version` prints only the version, while its other commands carry the announcement.
 - `announce_args` names the command to search for the announcement in that case, and it is asked only of the copy `PATH` resolves; without it the version probe's own output is searched.
+- An announcement command that exits non-zero without printing an announcement is a check failure rather than "no update", because a tool that cannot reach its own update source (a blocked network, an expired login) announces nothing either.
+- A tool that swallows that failure and exits zero cannot be told apart from one with nothing to announce, so for such a tool a `published` source is the reliable probe.
 - An `announce_pattern` that is not a usable extended regular expression stops `arm`, and during a sweep it is reported as that one tool's own check failure so one broken pattern never stops the other watched tools from being checked.
 - A `git` entry reports how many commits the local clone is behind its remote branch, and stays silent when the clone is current or ahead.
 - An omitted `branch` uses the remote's default branch, taken from the clone's own record of it and otherwise asked of the remote directly, so a `--single-branch` clone still resolves.
@@ -1375,6 +1380,13 @@ A `published` object selects one public release source:
 `published` accepts only the fields shown for its source, and requires a package name or `owner/repo`, without a URL, query, or credentials.
 It compares that source with the newest installed copy found, and reports an update only when the published version is numerically newer; a published version already installed is reported only as `update not in effect`.
 For this comparison, the installed version is the first dotted number in the output of a version command that exits successfully, so `0.1.49`, `v0.8.2`, and `herdr 0.8.2` work; a version command that fails is reported as a check failure.
+An npm package that never lands on `PATH`, such as an MCP server a launcher starts through `npx`, names its installed version with `published.installed` instead, which takes exactly one of two absolute paths:
+
+- `{"npm_dir":"/abs/folder"}` reads the `version` of the package installed in that folder's `node_modules`, which is what the folder really runs even when its `package.json` pins a range.
+- `{"npx_pin":"/abs/launcher.sh"}` reads the first `<package>@<version>` pin in that file, such as `npx -y dataforseo-mcp-server@2.9.8`; a longer package name that merely ends the same way is not read as this one.
+
+`installed` is accepted only for an `npm` source, and an install that cannot be read, or a launcher that pins no numbered version (`@latest`), is a check failure.
+A launcher that always runs `@latest` with no local install has nothing to fall behind, so it needs no `published` probe at all.
 The published version must be a dotted numeric version with an optional leading `v`; other formats, including prerelease suffixes, produce a check failure.
 Components are compared numerically, with leading zeroes and missing trailing zero components ignored.
 These queries use `curl` and the existing `jq` parser, without an npm installation or a GitHub login; `curl` is required only for a `published` probe.
@@ -1395,8 +1407,13 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 
 **Repeat reporting and inheritance**
 
-- The check prints nothing when everything is current, and `state/.tool-updates` records the findings the last report was made from so the same pending update is reported once instead of on every poll.
-- A changed or returning condition is reported again.
+- The check prints nothing when everything is current.
+- `state/.tool-updates` remembers each reported finding by its tool, the source that found it, and its condition, never by its text, so the same pending update is reported once instead of on every poll.
+- Detail that moves on its own is therefore not news: an upstream branch gaining commits while the clone stays behind, or a newer release while an update is still pending, is not reported again.
+- A tool going from current to behind, or a tool joining the list, is news, and so is a condition that cleared and returned.
+- A source that reached no answer on a sweep (a timed-out probe, an unreachable remote, a tool the sweep had to stop waiting for) keeps what was recorded for it, so a transient failure never makes an already reported update news again.
+- A check failure and an unfinished sweep are remembered apart from updates and are news again only after a whole day without them, so a source that flips between answering and not is reported once rather than on every flip.
+- When anything is news, the report line lists the news first and then, after `already reported:`, whatever else still needs attention.
 - Adding, removing, or changing a watched tool is an edit to this file and needs no code change or re-arming.
 - This file is not inherited by secondmate homes, so each home watches the tools it actually depends on.
 
@@ -1405,10 +1422,12 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 | Setting | Default | Purpose |
 | --- | --- | --- |
 | `FM_TOOL_UPDATE_INTERVAL` | 900 seconds | Time between probes; `0` probes on every run. |
-| `FM_TOOL_UPDATE_PROBE_SECS` | 5 | Bounds one probe. |
+| `FM_TOOL_UPDATE_PROBE_SECS` | 5 | Bounds one probe, unless the tool sets its own `probe_secs`. |
 | `FM_TOOL_UPDATE_BUDGET_SECS` | 20 | Bounds a whole sweep. |
 
-- A sweep that skips work because its budget runs out records the partial findings, including the incomplete check, and waits until the next configured interval before probing again, and a sweep whose last issued probe finishes after the deadline is complete rather than skipped.
+- Every watched tool is checked at the same time as the others, so a slow source spends only its own tool's time and never leaves the tools after it unchecked.
+- No probe is given more time than the sweep has left, whatever its `probe_secs`.
+- A probe the budget can no longer afford is reported as that tool's check failure, and a tool still being checked shortly after the deadline is named in `check incomplete: the time budget ran out before <tool> finished`; either way the sweep records what it found and waits for the next interval.
 - The sweep must finish inside `FM_CHECK_TIMEOUT` (default 30), because a run the watcher kills prints nothing and records nothing and would then repeat that silence on every poll.
 - So a budget larger than that timeout allows is cut down to what fits instead of being refused, and the cut is reported in the report line.
 - A budget that is not a whole number from 1 to 120 is still refused outright.

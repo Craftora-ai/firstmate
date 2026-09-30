@@ -36,7 +36,11 @@
 # report a version is reported as a check failure rather than assumed current.
 #
 # Published versions are read from the public npm registry or GitHub latest
-# release API with curl and jq. No vendor CLI update command is invoked.
+# release API with curl and jq. No vendor CLI update command is invoked. The
+# installed side of that comparison is the newest copy on PATH, or, for an npm
+# package that lives outside PATH (an MCP server launched from its own folder),
+# the version installed in a folder's node_modules or pinned as <package>@<version>
+# in a launcher file.
 #
 # What this script never does: it reports, and it repairs nothing. It does not
 # install, update, uninstall, reorder PATH, or touch any version manager's
@@ -50,9 +54,18 @@
 #
 # Probing costs real time, so `check` runs its probes at most once per
 # FM_TOOL_UPDATE_INTERVAL (default 900, 0 disables the gate, otherwise 60..86400)
-# and stays silent in between. Each probe is bounded by
-# FM_TOOL_UPDATE_PROBE_SECS (default 5, valid 1..30) and a whole sweep by
-# FM_TOOL_UPDATE_BUDGET_SECS (default 20, valid 1..120).
+# and stays silent in between. Each probe is bounded by the tool's own
+# probe_secs, else FM_TOOL_UPDATE_PROBE_SECS (default 5, valid 1..30), and a
+# whole sweep by FM_TOOL_UPDATE_BUDGET_SECS (default 20, valid 1..120). No probe
+# is given more time than the sweep has left.
+#
+# Every watched tool is checked by its own worker, and the workers run at the
+# same time, so a slow source (a remote that takes seconds to answer, a large
+# binary on a loaded host) spends only its own tool's time rather than the time
+# of every tool after it in the list. A worker stops issuing probes at the sweep
+# deadline, and the sweep stops waiting a moment after it, so a worker that has
+# still not finished is named as unfinished instead of holding the check past the
+# watcher's bound.
 #
 # The sweep has to finish inside the watcher's own per check bound, because a run
 # the watcher kills prints nothing and writes no record, so it would repeat that
@@ -63,12 +76,28 @@
 # it. A budget that cannot be read as a whole number from 1 to 120 is still
 # refused outright.
 #
-# The report record state/.tool-updates is written only when a sweep runs to its
-# end, and it carries the whole finding set the last report was made from,
-# uncut, so the same pending update is reported once rather than on every poll
-# while a new finding that lands past the one-line cut is still news. A sweep
-# killed part way through leaves no record and is retried, instead of
-# suppressing its finding.
+# The report record state/.tool-updates remembers what was reported by the
+# identity of each finding - its tool, the source that found it, and the
+# condition - never by its text. The text carries detail that moves on its own
+# (the upstream tip, how many commits behind, the newest published version), and
+# none of that is news: a tool going from current to behind is, and so is a tool
+# joining the list. Three rules keep one pending update from being reported over
+# and over:
+#
+#   - A source that reached no answer this sweep (a probe that timed out, a
+#     remote that could not be read, a worker the deadline cut off) keeps what
+#     was recorded for it, so a transient failure never clears the memory of an
+#     update already reported.
+#   - A check failure and an unfinished sweep describe that probe or that sweep,
+#     not the tool, so they are remembered apart from updates and are only news
+#     again once absent for FAILURE_QUIET_SECS. A source that flips between
+#     answering and not is reported once, not on every flip.
+#   - Any other finding is remembered only while it is still found, so a
+#     condition that clears and returns is news again.
+#
+# When anything is news, the one report line puts the news first and what was
+# already reported after it, so the reason for the wake survives the one-line
+# cut. A sweep the watcher kills writes no record and is retried.
 set -u
 export LC_ALL=C
 # A watched git remote must never stop to ask for credentials; an unauthenticated
@@ -84,7 +113,11 @@ CHECK_ID=tool-updates
 CHECK_SHIM="$STATE/$CHECK_ID.check.sh"
 CHECK_TRUST="$STATE/$CHECK_ID.check-trust"
 REGISTER_BIN="$SCRIPT_DIR/fm-check-register.sh"
-RECORD_SCHEMA=fm-tool-updates-v1
+RECORD_SCHEMA=fm-tool-updates-v2
+# How long a check failure or an unfinished sweep stays remembered once it is no
+# longer found. A source that answers on one poll and not the next would
+# otherwise be reported again on every flip.
+FAILURE_QUIET_SECS=86400
 # Wider than the digest default because one finding names two absolute paths and
 # their two versions, and several tools can report in the same sweep.
 MAX_LINE=1000
@@ -197,51 +230,57 @@ record_epoch_now() {
 
 real_epoch() { date +%s; }
 
-FINDINGS=
 DEADLINE=0
-INCOMPLETE_REPORTED=0
 
-# Each finding is flattened to a single line here, because the whole report must
-# stay one line for the wake record.
-emit() {
-  local text
-  text=$(printf '%s' "$1" | tr '\t\r\n' '   ')
-  if [ -z "$FINDINGS" ]; then
-    FINDINGS=$text
-  else
-    FINDINGS="$FINDINGS; $text"
-  fi
+# --- findings ---------------------------------------------------------------
+#
+# A finding is identified by <tool>/<source>/<condition>, never by its text. The
+# sources are command (the copies on PATH), announce (the tool's own update
+# announcement), published (a registry or release page), and git (a clone
+# against its remote); a finding about the sweep itself has an empty tool and the
+# source sweep. The conditions are available, not-in-effect, and failed for a
+# tool, and incomplete, budget-cut, registry, and failed for the sweep.
+#
+# A worker writes to its own output file, one line per finding and one line per
+# source that reached an answer:
+#
+#   F <TAB> <key> <TAB> <text>
+#   A <TAB> <source>
+#
+# A source that also reported a failure did not reach an answer, whatever else
+# it said. The text is flattened to a single line here, because the whole report
+# must stay one line for the wake record.
+
+WORKER_TOOL=
+WORKER_PROBE_SECS=$PROBE_SECS
+
+finding() {
+  local source=$1 condition=$2 text
+  text=$(printf '%s' "$3" | tr '\t\r\n' '   ')
+  printf 'F\t%s/%s/%s\t%s\n' "$WORKER_TOOL" "$source" "$condition" "$text"
+}
+
+answered() {
+  printf 'A\t%s\n' "$1"
 }
 
 budget_exhausted() {
   [ "$(real_epoch)" -ge "$DEADLINE" ]
 }
 
-# True while the sweep budget still has room for another probe. When it does not,
-# it records once which tool the sweep did not finish, so a sweep that cannot
-# finish says so rather than being killed by the watcher with nothing printed.
-budget_allows() {
-  local name=$1
-  budget_exhausted || return 0
-  if [ "$INCOMPLETE_REPORTED" -eq 0 ]; then
-    INCOMPLETE_REPORTED=1
-    emit "check incomplete: the time budget ran out before $name"
-  fi
-  return 1
-}
-
-# The bound for one probe: the probe bound, cut down to whatever the sweep
-# budget has left, so no probe can run past the end of the sweep. Never below
-# PROBE_MIN_SECS, because fm_run_timed treats a non-positive bound as no bound.
+# The bound for one probe: this tool's probe bound, cut down to whatever the
+# sweep budget has left, so no probe can run past the end of the sweep. Never
+# below PROBE_MIN_SECS, because fm_run_timed treats a non-positive bound as no
+# bound.
 probe_bound() {
   local left
   left=$((DEADLINE - $(real_epoch)))
   if [ "$left" -lt "$PROBE_MIN_SECS" ]; then
     printf '%s\n' "$PROBE_MIN_SECS"
-  elif [ "$left" -lt "$PROBE_SECS" ]; then
+  elif [ "$left" -lt "$WORKER_PROBE_SECS" ]; then
     printf '%s\n' "$left"
   else
-    printf '%s\n' "$PROBE_SECS"
+    printf '%s\n' "$WORKER_PROBE_SECS"
   fi
 }
 
@@ -331,7 +370,8 @@ config_validate() {
       if ($t | type) != "object" then "every entry in tools must be an object"
       elif ($t.name | type) != "string" or ($t.name | length) == 0 then "every tool needs a non-empty name"
       elif ($t.name | test("^[A-Za-z0-9._+-]+$") | not) then "tool name \($t.name) may use only letters, digits, dot, underscore, plus, and dash"
-      elif ($t | has("command") | not) and ($t | has("git") | not) then "tool \($t.name) needs command, git, or both"
+      elif ($t | has("command") | not) and ($t | has("git") | not) and ((($t.published | objects | has("installed")) // false) | not) then "tool \($t.name) needs command, git, or published.installed"
+      elif ($t | has("probe_secs")) and (($t.probe_secs | type) != "number" or ($t.probe_secs | . != floor) or $t.probe_secs < 1 or $t.probe_secs > 30) then "tool \($t.name) probe_secs must be a whole number from 1 to 30"
       elif ($t | has("command")) and (($t.command | type) != "string" or ($t.command | test("^[A-Za-z0-9._+-]+$") | not)) then "tool \($t.name) command must be a bare executable name"
       elif ($t | has("version_args")) and (($t.version_args | type) != "array" or ($t.version_args | length) == 0) then "tool \($t.name) version_args must be a non-empty array"
       elif ($t | has("version_args")) and ([$t.version_args[] | select((type != "string") or (test("^[A-Za-z0-9._=+/:-]+$") | not))] | length) > 0 then "tool \($t.name) version_args must be simple flag strings without spaces"
@@ -345,14 +385,18 @@ config_validate() {
       elif ($t | has("git")) and ($t.git | has("remote")) and (($t.git.remote | type) != "string" or ($t.git.remote | test("^[A-Za-z0-9._-]+$") | not)) then "tool \($t.name) git.remote must be a simple remote name"
       elif ($t | has("git")) and ($t.git | has("branch")) and (($t.git.branch | type) != "string" or ($t.git.branch | test("^[A-Za-z0-9._/-]+$") | not)) then "tool \($t.name) git.branch must be a simple branch name"
       elif ($t | has("published")) and (($t.published | type) != "object") then "tool \($t.name) published must be an object"
-      elif ($t | has("published")) and (($t | has("command")) | not) then "tool \($t.name) published needs command to report the installed version"
+      elif ($t | has("published")) and (($t | has("command")) | not) and (($t.published | has("installed")) | not) then "tool \($t.name) published needs command or published.installed to report the installed version"
       elif ($t | has("published")) and ($t.published.source != "npm" and $t.published.source != "github") then "tool \($t.name) published.source must be npm or github"
       elif ($t | has("published")) and $t.published.source == "npm" and
         (($t.published.package | type) != "string" or ($t.published.package | test("^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*$") | not)) then "tool \($t.name) published.package must be an npm package name"
       elif ($t | has("published")) and $t.published.source == "github" and
         (($t.published.repo | type) != "string" or ($t.published.repo | test("^[A-Za-z0-9][A-Za-z0-9-]*/[A-Za-z0-9_.-]+$") | not)) then "tool \($t.name) published.repo must be a GitHub owner/repo"
       elif ($t | has("published")) and
-        (($t.published | keys) - (if $t.published.source == "npm" then ["source", "package"] else ["source", "repo"] end) | length) > 0 then "tool \($t.name) published has unsupported fields"
+        (($t.published | keys) - (if $t.published.source == "npm" then ["source", "package", "installed"] else ["source", "repo"] end) | length) > 0 then "tool \($t.name) published has unsupported fields"
+      elif ($t | has("published")) and ($t.published | has("installed")) and
+        (($t.published.installed | type) != "object" or ([$t.published.installed | keys[] | select(. == "npm_dir" or . == "npx_pin")] | length) != 1 or ($t.published.installed | length) != 1) then "tool \($t.name) published.installed must name exactly one of npm_dir or npx_pin"
+      elif ($t | has("published")) and ($t.published | has("installed")) and
+        (($t.published.installed | to_entries[0].value) as $p | ($p | type) != "string" or ($p | startswith("/") | not) or ($p | test("[[:cntrl:]]"))) then "tool \($t.name) published.installed must be an absolute path on one line"
       else empty
       end;
     def problems:
@@ -395,7 +439,10 @@ config_records() {
       (.git.remote // "origin"),
       (.git.branch // ""),
       (.published.source // ""),
-      (.published.package // .published.repo // "")
+      (.published.package // .published.repo // ""),
+      ((.published.installed // {}) | keys[0] // ""),
+      ((.published.installed // {}) | to_entries[0].value // ""),
+      ((.probe_secs // "") | tostring)
     ] | join("\u001f")
   ' "$CONFIG" 2>/dev/null
 }
@@ -433,28 +480,28 @@ COMMAND_VERSION=
 
 command_findings() {
   local name=$1 command_name=$2 args_joined=$3 announce=$4 announce_args=$5 published=$6
-  local hit out version matched announce_out status matched_line announced_version
-  local resolved_path='' resolved_version='' resolved_out=''
+  local hit out version matched announce_out announce_status status matched_line announced_version
+  local resolved_path='' resolved_version='' resolved_out='' resolved_status=0
   local best_path='' best_version='' best_status=0 unreadable='' hits=''
   COMMAND_VERSION=
 
   # This tool's announcement source is dead if its pattern cannot be used, which
   # is reported here, for this tool alone, so the rest of the sweep still runs.
   if [ -n "$announce" ] && ! announce_pattern_usable "$announce"; then
-    emit "$name check failed: announce_pattern is not a usable extended regular expression"
+    finding announce failed "$name check failed: announce_pattern is not a usable extended regular expression"
     announce=
   fi
 
   hits=$(path_hits "$command_name")
   if [ -z "$hits" ]; then
-    emit "$name check failed: $command_name is not on PATH"
+    finding command failed "$name check failed: $command_name is not on PATH"
     return 0
   fi
 
   while IFS= read -r hit; do
     [ -n "$hit" ] || continue
     if budget_exhausted; then
-      emit "$name check failed: the time budget ran out before every copy answered"
+      finding command failed "$name check failed: the time budget ran out before every copy answered"
       break
     fi
     # shellcheck disable=SC2086  # deliberate split on validated space-free tokens
@@ -465,6 +512,7 @@ command_findings() {
       resolved_path=$hit
       resolved_version=$version
       resolved_out=$out
+      resolved_status=$status
     fi
     if [ -z "$version" ]; then
       [ -n "$unreadable" ] || unreadable=$hit
@@ -485,40 +533,47 @@ EOF
     # release on its other commands. So announce_args may name a second command,
     # and it is asked of the copy PATH actually resolves.
     announce_out=$resolved_out
+    announce_status=$resolved_status
     if [ "$announce_args" != "$args_joined" ]; then
       if budget_exhausted; then
         # The version probe's output cannot carry the announcement, so searching
         # it would present a source that was never asked as a clean result.
-        emit "$name check failed: the time budget ran out before the update announcement was checked"
-        announce_out=
+        finding announce failed "$name check failed: the time budget ran out before the update announcement was checked"
+        announce_status=
       else
         # shellcheck disable=SC2086  # deliberate split on validated space-free tokens
         announce_out=$(probe_output "$resolved_path" $announce_args)
-        status=$?
-        if [ "$status" -eq 124 ]; then
-          # A source that was asked and never answered is not a source that had
-          # nothing to say. The one that answers with nothing stays silent below.
-          emit "$name check failed: $resolved_path did not answer when asked for its update announcement"
-          announce_out=
-        fi
+        announce_status=$?
       fi
     fi
-    if [ -n "$announce_out" ]; then
+    if [ -n "$announce_status" ]; then
       # Not a pipeline, so grep's own status is still readable here: a pattern
       # grep cannot use is a check failure, never read as nothing to announce.
       matched=$(grep -oE -- "$announce" <<< "$announce_out" 2>/dev/null)
       status=$?
       if [ "$status" -gt 1 ]; then
-        emit "$name check failed: announce_pattern is not a usable extended regular expression"
+        finding announce failed "$name check failed: announce_pattern is not a usable extended regular expression"
       elif [ -n "$matched" ]; then
+        answered announce
         matched_line=$(printf '%s\n' "$matched" | head -n 1)
         announced_version=$(parse_announced_version "$matched_line")
         # An announcement naming no readable version is reported as today; one
         # naming a version already installed is not an available update.
         if [ -z "$announced_version" ] || [ -z "$best_version" ] \
           || version_newer "$announced_version" "$best_version"; then
-          emit "$name update available: $matched_line"
+          finding announce available "$name update available: $matched_line"
         fi
+      elif fm_timed_out "$announce_status"; then
+        # A source that was asked and never answered is not a source that had
+        # nothing to say.
+        finding announce failed "$name check failed: $resolved_path did not answer when asked for its update announcement"
+      elif [ "$announce_status" -ne 0 ]; then
+        # A command that fails while fetching its own update news (a blocked
+        # network, an expired login) prints no announcement either, and that
+        # silence is not the answer "no update".
+        finding announce failed "$name check failed: $resolved_path exited $announce_status without an update announcement, so none could be read"
+      else
+        answered announce
       fi
     fi
   fi
@@ -526,37 +581,81 @@ EOF
   if [ -z "$resolved_version" ]; then
     # No copy was probed at all when the path is empty, and the budget report
     # already covers that, so do not blame a copy that was never asked.
-    [ -z "$resolved_path" ] || emit "$name check failed: $resolved_path did not report a version"
+    [ -z "$resolved_path" ] || finding command failed "$name check failed: $resolved_path did not report a version"
     return 0
   fi
 
   if [ "$best_status" -eq 0 ]; then
     COMMAND_VERSION=$best_version
   elif [ -n "$published" ]; then
-    emit "$name check failed: $best_path exited $best_status, so its version was not compared with the published release"
+    finding published failed "$name check failed: $best_path exited $best_status, so its version was not compared with the published release"
   fi
 
   if [ -n "$best_version" ] && [ "$best_path" != "$resolved_path" ] \
     && version_newer "$best_version" "$resolved_version"; then
-    emit "$name update not in effect: PATH resolves $resolved_version at $resolved_path but $best_version is installed at $best_path"
+    finding command not-in-effect "$name update not in effect: PATH resolves $resolved_version at $resolved_path but $best_version is installed at $best_path"
   fi
 
   if [ -n "$unreadable" ]; then
-    emit "$name check failed: $unreadable did not report a version"
+    finding command failed "$name check failed: $unreadable did not report a version"
   fi
+  answered command
   return 0
 }
 
 # --- published release probes -----------------------------------------------
 
+# The version of <package> installed in <dir>/node_modules, the way npm itself
+# records it, so a folder that pins a range still reports what is really there.
+# Local reads are bounded like any other probe, because a home on a synced or
+# network volume can stall on a plain file read.
+npm_dir_version() {
+  local dir=$1 package=$2
+  fm_run_timed "$(probe_bound)" jq -r '.version | strings' "$dir/node_modules/$package/package.json" 2>/dev/null \
+    | head -n 1
+}
+
+# The version a launcher file pins as <package>@<version>, as in `npx -y
+# pkg@1.2.3`. The package name must start the token, so a longer name that ends
+# the same way is never read as this one.
+npx_pin_version() {
+  local file=$1 package=$2 pattern
+  pattern=$(printf '%s' "$package" | sed 's/[.]/[.]/g')
+  fm_run_timed "$(probe_bound)" grep -oE -- "(^|[^A-Za-z0-9._/@-])${pattern}@v?[0-9]+(\.[0-9]+)+" "$file" 2>/dev/null \
+    | head -n 1 | sed 's/.*@v\{0,1\}//'
+}
+
 published_findings() {
-  local name=$1 source=$2 package=$3 installed=$4
-  local url field version status bound
-  # command_findings already reports a missing or unreadable resolved command.
-  [ -n "$installed" ] || return 0
-  budget_allows "$name published source" || return 0
+  local name=$1 source=$2 package=$3 installed_kind=$4 installed_path=$5 command_version=$6
+  local installed url field version status bound
+  case "$installed_kind" in
+    npm_dir)
+      installed=$(npm_dir_version "$installed_path" "$package")
+      if [ -z "$(parse_version "$installed")" ] || [ "$(parse_version "$installed")" != "$installed" ]; then
+        finding published failed "$name check failed: no version of $package could be read from $installed_path/node_modules"
+        return 0
+      fi
+      ;;
+    npx_pin)
+      installed=$(npx_pin_version "$installed_path" "$package")
+      if [ -z "$installed" ]; then
+        finding published failed "$name check failed: no numbered $package@<version> pin could be read from $installed_path"
+        return 0
+      fi
+      ;;
+    *)
+      # command_findings already reported a missing or unreadable command, and
+      # this source stays unanswered so what was recorded for it is kept.
+      installed=$command_version
+      [ -n "$installed" ] || return 0
+      ;;
+  esac
+  if budget_exhausted; then
+    finding published failed "$name check failed: the time budget ran out before its published source was asked"
+    return 0
+  fi
   if ! command -v curl >/dev/null 2>&1; then
-    emit "$name check failed: curl is required to read its published source"
+    finding published failed "$name check failed: curl is required to read its published source"
     return 0
   fi
   case "$source" in
@@ -588,15 +687,16 @@ published_findings() {
     'select(length == 1) | .[0][$field] | strings | select(test("^v?[0-9]+(\\.[0-9]+)+$"))' </dev/null 2>/dev/null)
   status=$?
   if [ "$status" -eq 65 ]; then
-    emit "$name check failed: published source $url did not report a supported version"
+    finding published failed "$name check failed: published source $url did not report a supported version"
     return 0
   elif [ "$status" -ne 0 ]; then
-    emit "$name check failed: published source $url could not be reached or read (exit $status)"
+    finding published failed "$name check failed: published source $url could not be reached or read (exit $status)"
     return 0
   fi
+  answered published
   version=${version#v}
   if version_newer "$version" "$installed"; then
-    emit "$name update available: installed $installed, published $version at $url"
+    finding published available "$name update available: installed $installed, published $version at $url"
   fi
 }
 
@@ -624,11 +724,11 @@ git_probe_answered() {
   local status=$1 name=$2 subject=$3 question=$4
   case "$status" in
     "$GIT_PROBE_NOT_ISSUED")
-      emit "$name check failed: the time budget ran out before $subject was asked $question"
+      finding git failed "$name check failed: the time budget ran out before $subject was asked $question"
       return 1
       ;;
     124)
-      emit "$name check failed: $subject did not answer $question"
+      finding git failed "$name check failed: $subject did not answer $question"
       return 1
       ;;
   esac
@@ -644,19 +744,18 @@ git_findings() {
   local status remote_sha local_sha local_label count short symref
 
   if ! command -v git >/dev/null 2>&1; then
-    emit "$name check failed: git is not installed"
+    finding git failed "$name check failed: git is not installed"
     return 0
   fi
   if [ ! -d "$repo" ]; then
-    emit "$name check failed: $repo is not a directory"
+    finding git failed "$name check failed: $repo is not a directory"
     return 0
   fi
-  budget_allows "$name" || return 0
   git_probe "$repo" rev-parse --git-dir >/dev/null 2>&1
   status=$?
   git_probe_answered "$status" "$name" "$repo" "whether it is a git repository" || return 0
   if [ "$status" -ne 0 ]; then
-    emit "$name check failed: $repo is not a git repository"
+    finding git failed "$name check failed: $repo is not a git repository"
     return 0
   fi
 
@@ -675,7 +774,7 @@ git_findings() {
       | awk '$1 == "ref:" { sub(/^refs\/heads\//, "", $2); print $2; exit }')
   fi
   if [ -z "$branch" ]; then
-    emit "$name check failed: cannot resolve the default branch of $remote in $repo"
+    finding git failed "$name check failed: cannot resolve the default branch of $remote in $repo"
     return 0
   fi
 
@@ -686,12 +785,12 @@ git_findings() {
     # The probe itself failed, so nothing at all is known about the branch. An
     # offline host and a deleted branch are different problems, and reporting a
     # missing branch here would name a cause that was never established.
-    emit "$name check failed: $remote could not be reached or read from $repo"
+    finding git failed "$name check failed: $remote could not be reached or read from $repo"
     return 0
   fi
   remote_sha=$(printf '%s\n' "$remote_sha" | awk 'NR == 1 { print $1 }')
   if [ -z "$remote_sha" ]; then
-    emit "$name check failed: $remote has no branch $branch"
+    finding git failed "$name check failed: $remote has no branch $branch"
     return 0
   fi
 
@@ -706,13 +805,16 @@ git_findings() {
     local_sha=$(git_probe "$repo" rev-parse --verify --quiet HEAD 2>/dev/null)
     git_probe_answered "$?" "$name" "$repo" "where HEAD points" || return 0
     if [ -z "$local_sha" ]; then
-      emit "$name check failed: $repo has no commit to compare"
+      finding git failed "$name check failed: $repo has no commit to compare"
       return 0
     fi
     local_label='local HEAD'
   fi
 
-  [ "$local_sha" != "$remote_sha" ] || return 0
+  if [ "$local_sha" = "$remote_sha" ]; then
+    answered git
+    return 0
+  fi
 
   short=$(printf '%s' "$remote_sha" | cut -c1-12)
 
@@ -725,35 +827,46 @@ git_findings() {
     git_probe "$repo" merge-base --is-ancestor "$remote_sha" "$local_sha" 2>/dev/null
     status=$?
     git_probe_answered "$status" "$name" "$repo" "how its history compares with $remote/$branch" || return 0
-    [ "$status" -ne 0 ] || return 0
+    if [ "$status" -eq 0 ]; then
+      answered git
+      return 0
+    fi
     count=$(git_probe "$repo" rev-list --count "$local_sha..$remote_sha" 2>/dev/null)
     git_probe_answered "$?" "$name" "$repo" "how many commits it is behind $remote/$branch" || return 0
     case "$count" in
       ''|*[!0-9]*|0) count= ;;
     esac
     if [ -n "$count" ]; then
-      emit "$name update available: $local_label is $(commit_phrase "$count") behind $remote/$branch"
+      answered git
+      finding git available "$name update available: $local_label is $(commit_phrase "$count") behind $remote/$branch"
       return 0
     fi
   fi
 
-  emit "$name update available: $remote/$branch is at $short which this copy does not have"
+  answered git
+  finding git available "$name update available: $remote/$branch is at $short which this copy does not have"
   return 0
 }
 
 # --- report record ----------------------------------------------------------
 
 RECORD_EPOCH=0
-RECORD_REPORTED=
+# The recorded keys, space-delimited for a whole-word match, and the same keys
+# with the epoch each was last found, one "<epoch> <key>" per line.
+RECORD_KEYS=' '
+RECORD_SEEN=
 
 record_read() {
-  local line first=1
+  local line first=1 epoch key
   RECORD_EPOCH=0
-  RECORD_REPORTED=
+  RECORD_KEYS=' '
+  RECORD_SEEN=
   [ -f "$RECORD" ] || return 0
   while IFS= read -r line; do
     if [ "$first" = 1 ]; then
       first=0
+      # A record in another shape, including the text-keyed one this replaced,
+      # is read as no record: its keys cannot be recovered from rendered text.
       [ "$line" = "$RECORD_SCHEMA" ] || return 0
       continue
     fi
@@ -765,30 +878,216 @@ record_read() {
           *) RECORD_EPOCH=$line ;;
         esac
         ;;
-      reported=*) RECORD_REPORTED=${line#reported=} ;;
+      seen=*)
+        line=${line#seen=}
+        epoch=${line%% *}
+        key=${line#* }
+        case "$epoch" in
+          ''|*[!0-9]*) continue ;;
+        esac
+        case "$key" in
+          ''|*' '*|"$line") continue ;;
+        esac
+        RECORD_KEYS="$RECORD_KEYS$key "
+        RECORD_SEEN="$RECORD_SEEN$epoch $key
+"
+        ;;
     esac
   done < "$RECORD"
   return 0
 }
 
 record_write() {
-  local reported=$1 tmp
+  local seen=$1 tmp
   tmp=$(mktemp "$RECORD.XXXXXX" 2>/dev/null) || return 1
   chmod 0600 "$tmp" 2>/dev/null || { rm -f -- "$tmp"; return 1; }
   {
     printf '%s\n' "$RECORD_SCHEMA"
     printf 'epoch=%s\n' "$(record_epoch_now)"
-    printf 'reported=%s\n' "$reported"
+    printf '%s' "$seen" | sed '/^$/d; s/^/seen=/'
   } > "$tmp" || { rm -f -- "$tmp"; return 1; }
   mv -f -- "$tmp" "$RECORD" || { rm -f -- "$tmp"; return 1; }
   return 0
 }
 
+# --- sweep ------------------------------------------------------------------
+
+SWEEP_DIR=
+SWEEP_TOOLS=0
+WORKER_PIDS=
+# What this sweep found, one "<key> <TAB> <text>" per line, sweep findings first
+# and then each tool in config order.
+CURRENT=
+# Space-delimited <tool>/<source> pairs: every source the registry configures,
+# and every source whose worker reported an answer.
+CONFIGURED=' '
+ANSWERED=' '
+# Set when the registry could not be read, so no source can have answered and
+# everything recorded is kept.
+CARRY_ALL=0
+
+add_current() {
+  CURRENT="$CURRENT$1	$2
+"
+}
+
+current_has() {
+  case "$CURRENT" in
+    "$1	"*|*"
+$1	"*) return 0 ;;
+  esac
+  return 1
+}
+
+# shellcheck disable=SC2329  # Registered by action_check's EXIT trap.
+sweep_cleanup() {
+  [ -z "$SWEEP_DIR" ] || rm -rf -- "$SWEEP_DIR"
+}
+
+# Runs in its own subshell: every finding goes to this worker's output file.
+tool_worker() {
+  local name=$1 command_name=$2 args_joined=$3 announce=$4 announce_args=$5
+  local repo=$6 remote=$7 branch=$8 source=$9 package=${10}
+  local installed_kind=${11} installed_path=${12} probe_secs=${13}
+  local command_published=$source
+  WORKER_TOOL=$name
+  WORKER_PROBE_SECS=${probe_secs:-$PROBE_SECS}
+  COMMAND_VERSION=
+  # A published source with its own installed version does not depend on how the
+  # command's version probe exited.
+  [ -z "$installed_kind" ] || command_published=
+  [ -z "$command_name" ] || command_findings "$name" "$command_name" "$args_joined" "$announce" "$announce_args" "$command_published"
+  [ -z "$source" ] || published_findings "$name" "$source" "$package" "$installed_kind" "$installed_path" "$COMMAND_VERSION"
+  [ -z "$repo" ] || git_findings "$name" "$repo" "$remote" "$branch"
+}
+
+# One worker per tool, all started at once. A worker's output never reaches this
+# check's own stdout, so a worker still running when the check exits cannot hold
+# the watcher's read of the report open.
+start_workers() {
+  local index=0 name command_name args_joined announce announce_args repo remote branch
+  local source package installed_kind installed_path probe_secs
+  while IFS=$FIELD_SEP read -r name command_name args_joined announce announce_args repo remote branch \
+    source package installed_kind installed_path probe_secs; do
+    [ -n "$name" ] || continue
+    index=$((index + 1))
+    printf '%s\n' "$name" > "$SWEEP_DIR/$index.name"
+    [ -z "$command_name" ] || CONFIGURED="${CONFIGURED}$name/command "
+    [ -z "$announce" ] || CONFIGURED="${CONFIGURED}$name/announce "
+    [ -z "$source" ] || CONFIGURED="${CONFIGURED}$name/published "
+    [ -z "$repo" ] || CONFIGURED="${CONFIGURED}$name/git "
+    (
+      tool_worker "$name" "$command_name" "$args_joined" "$announce" "$announce_args" \
+        "$repo" "$remote" "$branch" "$source" "$package" "$installed_kind" "$installed_path" "$probe_secs" \
+        > "$SWEEP_DIR/$index.out"
+      : > "$SWEEP_DIR/$index.done"
+    ) </dev/null >/dev/null 2>&1 &
+    WORKER_PIDS="$WORKER_PIDS $!"
+  done < <(config_records)
+  SWEEP_TOOLS=$index
+}
+
+# Waits until every worker is done, or until a probe issued at the deadline could
+# have ended, and then stops whatever is still running. A stopped worker's tool
+# is named as unfinished, which is far better than the watcher killing the whole
+# check with nothing printed.
+wait_for_workers() {
+  local stop index pid
+  stop=$((DEADLINE + PROBE_MIN_SECS + KILL_GRACE_SECS))
+  while :; do
+    index=1
+    while [ "$index" -le "$SWEEP_TOOLS" ] && [ -e "$SWEEP_DIR/$index.done" ]; do
+      index=$((index + 1))
+    done
+    [ "$index" -le "$SWEEP_TOOLS" ] || return 0
+    [ "$(real_epoch)" -lt "$stop" ] || break
+    sleep 0.1
+  done
+  for pid in $WORKER_PIDS; do
+    kill -TERM "$pid" 2>/dev/null || true
+  done
+}
+
+collect_workers() {
+  local index name kind field text unfinished=
+  index=1
+  while [ "$index" -le "$SWEEP_TOOLS" ]; do
+    name=$(cat "$SWEEP_DIR/$index.name" 2>/dev/null)
+    if [ -f "$SWEEP_DIR/$index.out" ]; then
+      while IFS='	' read -r kind field text; do
+        case "$kind" in
+          F) [ -z "$text" ] || add_current "$field" "$text" ;;
+          A) ANSWERED="${ANSWERED}$name/$field " ;;
+        esac
+      done < "$SWEEP_DIR/$index.out"
+    fi
+    [ -e "$SWEEP_DIR/$index.done" ] || unfinished="${unfinished:+$unfinished, }$name"
+    index=$((index + 1))
+  done
+  [ -z "$unfinished" ] \
+    || add_current /sweep/incomplete "check incomplete: the time budget ran out before $unfinished finished"
+}
+
+# True when the source <tool>/<source> reached an answer this sweep: its worker
+# said so and it reported no failure alongside.
+source_answered() {
+  case "$ANSWERED" in
+    *" $1 "*) ;;
+    *) return 1 ;;
+  esac
+  ! current_has "$1/failed"
+}
+
+# The next record: every key found now, plus each recorded key the rules in the
+# header keep.
+next_record() {
+  local now=$1 epoch key seen='' listed=' '
+  while IFS='	' read -r key _; do
+    [ -n "$key" ] || continue
+    case "$listed" in
+      *" $key "*) continue ;;
+    esac
+    listed="$listed$key "
+    seen="$seen$now $key
+"
+  done <<EOF
+$CURRENT
+EOF
+  while read -r epoch key; do
+    [ -n "$key" ] || continue
+    case "$listed" in
+      *" $key "*) continue ;;
+    esac
+    case "$key" in
+      */failed|*/incomplete)
+        [ $((now - epoch)) -lt "$FAILURE_QUIET_SECS" ] || continue
+        ;;
+      /sweep/*)
+        continue
+        ;;
+      *)
+        if [ "$CARRY_ALL" -ne 1 ]; then
+          case "$CONFIGURED" in
+            *" ${key%/*} "*) ;;
+            *) continue ;;
+          esac
+          ! source_answered "${key%/*}" || continue
+        fi
+        ;;
+    esac
+    listed="$listed$key "
+    seen="$seen$epoch $key
+"
+  done <<EOF
+$RECORD_SEEN
+EOF
+  printf '%s' "$seen"
+}
+
 # --- actions ----------------------------------------------------------------
 
 action_check() {
-  local name command_name args_joined announce announce_args repo remote branch
-  local line now source package
+  local line now key text news='' known='' seen
 
   [ -f "$CONFIG" ] || return 0
 
@@ -802,41 +1101,56 @@ action_check() {
   DEADLINE=$(($(real_epoch) + BUDGET_SECS))
 
   if [ -n "$BUDGET_CUT_FROM" ]; then
-    emit "sweep budget ${BUDGET_CUT_FROM}s cut to ${BUDGET_SECS}s to stay inside the watcher check timeout of ${CHECK_TIMEOUT}s"
+    add_current /sweep/budget-cut "sweep budget ${BUDGET_CUT_FROM}s cut to ${BUDGET_SECS}s to stay inside the watcher check timeout of ${CHECK_TIMEOUT}s"
   fi
 
   if ! config_validate; then
-    emit "watched tool registry: $CONFIG_PROBLEM"
+    add_current /sweep/registry "watched tool registry: $CONFIG_PROBLEM"
+    CARRY_ALL=1
+  elif ! SWEEP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/fm-tool-updates.XXXXXX" 2>/dev/null); then
+    SWEEP_DIR=
+    add_current /sweep/failed "check failed: no scratch directory could be made for the sweep"
+    CARRY_ALL=1
   else
-    while IFS=$FIELD_SEP read -r name command_name args_joined announce announce_args repo remote branch source package; do
-      [ -n "$name" ] || continue
-      budget_allows "$name" || break
-      COMMAND_VERSION=
-      [ -z "$command_name" ] || command_findings "$name" "$command_name" "$args_joined" "$announce" "$announce_args" "$source"
-      [ -z "$source" ] || published_findings "$name" "$source" "$package" "$COMMAND_VERSION"
-      [ -z "$repo" ] || git_findings "$name" "$repo" "$remote" "$branch"
-    done < <(config_records)
+    # A check the watcher stops still removes its scratch directory: the exit
+    # below runs the EXIT trap, which a plain TERM would skip.
+    trap sweep_cleanup EXIT
+    trap 'exit 143' HUP INT TERM
+    start_workers
+    wait_for_workers
+    collect_workers
   fi
 
+  # News first, so the reason for the wake is never the part the one-line cut
+  # drops; what was already reported follows, so the line still shows everything
+  # that currently needs attention.
+  while IFS='	' read -r key text; do
+    [ -n "$key" ] || continue
+    case "$RECORD_KEYS" in
+      *" $key "*) known="${known:+$known; }$text" ;;
+      *) news="${news:+$news; }$text" ;;
+    esac
+  done <<EOF
+$CURRENT
+EOF
+
   line=
-  if [ -n "$FINDINGS" ]; then
+  if [ -n "$news" ]; then
+    line="tool updates: $news"
+    [ -z "$known" ] || line="$line; already reported: $known"
     # Capped through the shared cut so an over-long report carries the same
     # visible truncation marker the digests use, instead of ending mid-finding
     # as if that were all of it.
-    fm_cap_line_var "tool updates: $FINDINGS" "$MAX_LINE"
+    fm_cap_line_var "$line" "$MAX_LINE"
     line=$FM_LINE_CAP_LINE
   fi
 
-  # The cut line is what gets printed, but the whole finding set is what decides
-  # whether this is news, because a finding that lands past the cut leaves the
-  # printed line unchanged and would otherwise be suppressed for good.
-  #
   # Report before recording, so a record that cannot be written costs a repeated
   # report rather than a lost one.
-  if [ -n "$line" ] && [ "$FINDINGS" != "$RECORD_REPORTED" ]; then
-    printf '%s\n' "$line"
-  fi
-  record_write "$FINDINGS" || true
+  [ -z "$line" ] || printf '%s\n' "$line"
+  seen=$(next_record "$now")
+  record_write "$seen
+" || true
   return 0
 }
 

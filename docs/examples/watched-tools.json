@@ -38,7 +38,32 @@
       "command": "no-mistakes",
       "version_args": ["--version"],
       "announce_args": ["--help"],
-      "announce_pattern": "A new version of no-mistakes is available: [^ ]+ -> [^ ]+"
+      "announce_pattern": "A new version of no-mistakes is available: [^ ]+ -> [^ ]+",
+      "published": {
+        "source": "github",
+        "repo": "kunchenguid/no-mistakes"
+      }
+    },
+    {
+      "name": "kimi",
+      "command": "kimi",
+      "probe_secs": 15
+    },
+    {
+      "name": "exa-mcp",
+      "published": {
+        "source": "npm",
+        "package": "exa-mcp-server",
+        "installed": { "npm_dir": "/absolute/path/to/mcp/exa" }
+      }
+    },
+    {
+      "name": "dataforseo-mcp",
+      "published": {
+        "source": "npm",
+        "package": "dataforseo-mcp-server",
+        "installed": { "npx_pin": "/absolute/path/to/mcp/dfs/launch-dfs-mcp.sh" }
+      }
     }
   ]
 }

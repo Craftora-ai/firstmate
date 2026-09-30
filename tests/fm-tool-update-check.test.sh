@@ -417,7 +417,6 @@ SH
   run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_BUDGET_SECS=2
   report=$(cat "$out")
   assert_contains "$report" "no-mistakes check failed: the time budget ran out before the update announcement was checked" "an announcement source that was never asked was not reported"
-  assert_grep 'reported=' "$home/state/.tool-updates" "an unchecked announcement did not record its finding"
   pass "an announcement source the budget could not reach is reported, not read as current"
 }
 
@@ -597,7 +596,7 @@ test_git_probes_stop_when_the_sweep_budget_is_gone() {
   # so they are the ones that can push a sweep past the watcher's own timeout and
   # leave it killed with nothing printed at all. Here the tool's command probe
   # spends the whole budget, so its git probes must not start: the sweep says
-  # which tool it did not finish instead of quietly running on.
+  # which probe it could not issue instead of quietly running on.
   home=$(make_home git-budget)
   work=$(git_fixture git-budget-repo)
   git -C "$work" reset -q --hard HEAD~2
@@ -607,7 +606,7 @@ test_git_probes_stop_when_the_sweep_budget_is_gone() {
   out="$home/out.txt"
   run_check "$home" "$(fixture_path "$slow")" "$out" FM_TOOL_UPDATE_BUDGET_SECS=1
   report=$(cat "$out")
-  assert_contains "$report" "check incomplete: the time budget ran out before firstmate" "a sweep with no budget left did not say which tool it did not finish"
+  assert_contains "$report" "firstmate check failed: the time budget ran out before $work was asked whether it is a git repository" "a sweep with no budget left did not say which probe it could not issue"
   assert_not_contains "$report" "commits behind" "the git probes ran after the sweep budget was already gone"
   pass "git probes stop and name their tool once the sweep budget is gone"
 }
@@ -700,7 +699,7 @@ printf '%s\n' "$@" >> "$FM_RELEASE_LOG"
 # A query must not consume stdin even if its caller has input waiting.
 if IFS= read -r input; then exit 91; fi
 if [ "${FM_RELEASE_SLEEP:-0}" != 0 ]; then sleep "$FM_RELEASE_SLEEP"; fi
-if [ -n "${FM_RELEASE_CLOCK:-}" ]; then printf '110\n' > "$FM_RELEASE_CLOCK"; fi
+if [ -n "${FM_RELEASE_CLOCK:-}" ]; then printf '106\n' > "$FM_RELEASE_CLOCK"; fi
 cat "$FM_RELEASE_RESPONSE"
 exit "${FM_RELEASE_STATUS:-0}"
 SH
@@ -773,6 +772,7 @@ test_published_failures_do_not_blind_other_tools() {
   # HTTP request failed (connection failure, HTTP error, or curl timeout).
   printf '%s\n' '{"tag_name":"v0.9.0"}' > "$home/response"
   for status in 7 22 28; do
+    rm -f "$home/state/.tool-updates"
     run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_STATUS="$status"
     assert_contains "$(cat "$out")" "could not be reached or read (exit $status)" "HTTP failure was not reported"
     assert_contains "$(cat "$out")" 'other check failed:' "HTTP failure stopped the sweep"
@@ -790,35 +790,44 @@ test_published_probe_bounds_and_report_record() {
   make_copy "$dir" "$TOOL" '0.8.0'
   write_release_config "$home" herdr github herdrdev/herdr
   printf '%s\n' '{"tag_name":"v0.8.2"}' > "$home/response"
+  # The bound is a few seconds rather than one, so the fixture's own version
+  # probe answers inside it even on a heavily loaded host; the hung source is the
+  # only probe that can reach it.
   start=$(date +%s)
-  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_SLEEP=20 FM_TOOL_UPDATE_PROBE_SECS=1
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_SLEEP=30 FM_TOOL_UPDATE_PROBE_SECS=3
   elapsed=$(($(date +%s) - start))
-  [ "$elapsed" -lt 10 ] || fail "published probe escaped its bound: ${elapsed}s"
+  [ "$elapsed" -lt 20 ] || fail "published probe escaped its bound: ${elapsed}s"
   assert_contains "$(cat "$out")" 'could not be reached or read (exit 124)' "hung HTTP source was not a check failure"
-  # Spend the whole sweep budget, leaving a later tool unchecked.
-  jq '.tools += [{name:"unreached",command:"fm-absent-release-fixture"}]' "$home/config/watched-tools.json" > "$home/config-next"
+  # A hung source that outlasts the whole sweep is cut at the deadline, and the
+  # tool after it is still checked, because every tool has its own worker.
+  jq '.tools += [{name:"later",command:"fm-absent-release-fixture"}]' "$home/config/watched-tools.json" > "$home/config-next"
   mv "$home/config-next" "$home/config/watched-tools.json"
-  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_SLEEP=20 FM_TOOL_UPDATE_PROBE_SECS=5 FM_TOOL_UPDATE_BUDGET_SECS=2
-  assert_contains "$(cat "$out")" 'check incomplete:' "incomplete sweep was silent"
-  assert_grep 'check incomplete:' "$home/state/.tool-updates" "incomplete sweep did not record its finding"
-  rm "$home/state/.tool-updates"
-  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_SLEEP=20 FM_TOOL_UPDATE_PROBE_SECS=5 FM_TOOL_UPDATE_BUDGET_SECS=2
-  assert_grep 'reported=' "$home/state/.tool-updates" "incomplete sweep did not create a report record"
+  rm -f "$home/state/.tool-updates"
+  start=$(date +%s)
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_SLEEP=30 FM_TOOL_UPDATE_PROBE_SECS=30 FM_TOOL_UPDATE_BUDGET_SECS=4
+  elapsed=$(($(date +%s) - start))
+  [ "$elapsed" -lt 20 ] || fail "a hung published source held the sweep past its budget: ${elapsed}s"
+  assert_contains "$(cat "$out")" 'herdr check failed: published source' "a source cut at the deadline was not a check failure"
+  assert_contains "$(cat "$out")" 'later check failed: fm-absent-release-fixture is not on PATH' "a hung source left the tool after it unchecked"
+  # The same failures on the next sweep are not news.
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_SLEEP=30 FM_TOOL_UPDATE_PROBE_SECS=30 FM_TOOL_UPDATE_BUDGET_SECS=4
+  [ ! -s "$out" ] || fail "the same failures were reported again: $(cat "$out")"
   # A stalled parser must have the same bound as the HTTP read. Registry parsing
   # still goes through the real jq, so this only stalls response parsing.
   real_jq=$(command -v jq)
   cat > "$dir/jq" <<SH
 #!/usr/bin/env bash
-if [ "\$1" = -ser ]; then sleep 20; fi
+if [ "\$1" = -ser ]; then sleep 30; fi
 exec '$real_jq' "\$@"
 SH
   chmod 0755 "$dir/jq"
+  rm -f "$home/state/.tool-updates"
   start=$(date +%s)
-  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_TOOL_UPDATE_PROBE_SECS=1
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_TOOL_UPDATE_PROBE_SECS=3
   elapsed=$(($(date +%s) - start))
-  [ "$elapsed" -lt 10 ] || fail "response parser escaped the probe bound: ${elapsed}s"
+  [ "$elapsed" -lt 20 ] || fail "response parser escaped the probe bound: ${elapsed}s"
   assert_contains "$(cat "$out")" 'could not be reached or read (exit 124)' "stalled parser was not bounded"
-  pass "published probes obey their bound and incomplete sweeps record their findings"
+  pass "published probes obey their bound, a hung source costs no other tool, and repeats are not news"
 }
 
 # Advance the check's clock only when a fixture probe finishes. This pins the
@@ -848,12 +857,14 @@ test_completed_late_sweep_records_and_deduplicates() {
   printf '%s\n' '{"tag_name":"v0.8.2"}' > "$home/response"
   path=$(fixture_path "$dir")
 
-  # Starts at 100 with deadline 105, returns a valid newer version at 110.
+  # Starts at 100 with deadline 105, and returns a valid newer version at 106:
+  # past the deadline, but inside the grace the sweep waits for a probe that was
+  # already running.
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_CLOCK="$clock" FM_TOOL_UPDATE_BUDGET_SECS=5 FM_TOOL_UPDATE_NOW=1700000000
-  [ "$(cat "$clock")" = 110 ] || fail "the final probe did not cross the deadline"
+  [ "$(cat "$clock")" = 106 ] || fail "the final probe did not cross the deadline"
   assert_contains "$(cat "$out")" 'herdr update available:' "late completed sweep did not report its update"
+  assert_not_contains "$(cat "$out")" 'check incomplete' "a probe that ended inside the grace was treated as unfinished"
   assert_grep 'epoch=1700000000' "$home/state/.tool-updates" "late completed sweep discarded its cadence epoch"
-  assert_grep 'reported=herdr update available:' "$home/state/.tool-updates" "late completed sweep discarded its finding"
 
   printf '100\n' > "$clock"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_CLOCK="$clock" FM_TOOL_UPDATE_BUDGET_SECS=5 FM_TOOL_UPDATE_NOW=1700000000
@@ -868,28 +879,24 @@ test_completed_late_sweep_records_and_deduplicates() {
   [ ! -s "$out" ] || fail "late sweep cadence poll reported again"
   [ "$(wc -l < "$home/http.log")" = "$queries" ] || fail "late sweep cadence epoch did not suppress probes"
 
-  # Counterfactual: the same late probe with another configured tool after it
-  # leaves work unchecked.
+  # The same late probe with another configured tool after it: the tools are
+  # checked side by side, so the late probe costs the other tool nothing.
   jq '.tools += [{name:"unreached",command:"fm-unreached-budget-fixture"}]' "$home/config/watched-tools.json" > "$home/next-config"
   mv "$home/next-config" "$home/config/watched-tools.json"
   printf '100\n' > "$clock"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_CLOCK="$clock" FM_TOOL_UPDATE_BUDGET_SECS=5 FM_TOOL_UPDATE_NOW=1700001000
-  assert_contains "$(cat "$out")" 'check incomplete: the time budget ran out before unreached' "an unreached tool was treated as checked"
-  assert_grep 'epoch=1700001000' "$home/state/.tool-updates" "partial sweep discarded its cadence epoch"
-  assert_grep 'check incomplete:' "$home/state/.tool-updates" "partial sweep discarded its finding"
+  assert_contains "$(cat "$out")" 'unreached check failed: fm-unreached-budget-fixture is not on PATH' "a tool after the late probe was not checked"
+  assert_not_contains "$(cat "$out")" 'check incomplete' "a tool after the late probe was left unchecked"
+  assert_grep 'epoch=1700001000' "$home/state/.tool-updates" "second sweep discarded its cadence epoch"
   queries=$(wc -l < "$home/http.log")
   status=0
   env FM_HOME="$home" PATH="$path" FM_CHECK_TIMEOUT=30 FM_TOOL_UPDATE_INTERVAL=900 FM_TOOL_UPDATE_NOW=1700001300 \
     FM_TOOL_UPDATE_BUDGET_SECS=5 FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_CLOCK="$clock" \
     "$CHECK" > "$out" 2>&1 || status=$?
-  expect_code 0 "$status" "partial sweep cadence poll"
-  [ ! -s "$out" ] || fail "partial sweep cadence poll reported again"
-  [ "$(wc -l < "$home/http.log")" = "$queries" ] || fail "partial sweep cadence epoch did not suppress probes"
-  rm "$home/state/.tool-updates"
-  printf '100\n' > "$clock"
-  run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_CLOCK="$clock" FM_TOOL_UPDATE_BUDGET_SECS=5
-  assert_grep 'reported=' "$home/state/.tool-updates" "partial sweep did not create a record"
-  pass "complete and partial late sweeps record findings and retain cadence"
+  expect_code 0 "$status" "second sweep cadence poll"
+  [ ! -s "$out" ] || fail "second sweep cadence poll reported again"
+  [ "$(wc -l < "$home/http.log")" = "$queries" ] || fail "second sweep cadence epoch did not suppress probes"
+  pass "a sweep whose last probe ends inside the grace is complete and keeps its cadence"
 }
 
 test_unstarted_published_probe_reports_budget_once() {
@@ -902,26 +909,25 @@ test_unstarted_published_probe_reports_budget_once() {
   make_release_transport "$dir"
   cat > "$dir/$TOOL" <<SH
 #!/usr/bin/env bash
-printf '110\n' > '$clock'
+printf '106\n' > '$clock'
 printf 'herdr 0.8.0\n'
 SH
   chmod 0755 "$dir/$TOOL"
   write_release_config "$home" herdr github herdrdev/herdr
   run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_LOG="$home/http.log" FM_TOOL_UPDATE_BUDGET_SECS=5
-  [ "$(cat "$out")" = 'tool updates: check incomplete: the time budget ran out before herdr published source' ] \
+  [ "$(cat "$out")" = 'tool updates: herdr check failed: the time budget ran out before its published source was asked' ] \
     || fail "an unstarted published probe reported its budget failure more than once: $(cat "$out")"
   assert_absent "$home/http.log" "published source was asked after its budget was gone"
-  assert_grep 'reported=' "$home/state/.tool-updates" "unstarted published probe did not record its finding"
 
   # A skipped PATH copy is also unfinished work, even within the last tool.
   fresh="$home/fresh"
   make_copy "$fresh" "$TOOL" 'herdr 0.8.2'
   write_config "$home" "{\"tools\":[{\"name\":\"herdr\",\"command\":\"$TOOL\"}]}"
   printf '100\n' > "$clock"
+  rm -f "$home/state/.tool-updates"
   run_check "$home" "$(fixture_path "$dir:$fresh")" "$out" FM_TOOL_UPDATE_BUDGET_SECS=5
   assert_contains "$(cat "$out")" 'the time budget ran out before every copy answered' "skipped PATH copy was treated as checked"
-  assert_grep 'reported=' "$home/state/.tool-updates" "skipped PATH copy did not record its finding"
-  pass "a skipped published probe reports its budget failure once and skipped probes record their findings"
+  pass "a skipped published probe reports its budget failure once and a skipped copy is reported"
 }
 
 test_malformed_published_config_refuses_whole_registry() {
@@ -951,6 +957,15 @@ test_malformed_published_config_refuses_whole_registry() {
 {"name":"bad","command":"herdr-fixture","published":{"source":"github","repo":"https://github.com/herdrdev/herdr"}}
 {"name":"bad","command":"herdr-fixture","published":{"source":"github","repo":"herdrdev/herdr","tag":"v0.8.2"}}
 {"name":"bad","command":"herdr-fixture","published":{"source":"npm","package":"gnhf","repo":"x/y"}}
+{"name":"bad","published":{"source":"github","repo":"herdrdev/herdr","installed":{"npm_dir":"/opt/tool"}}}
+{"name":"bad","published":{"source":"npm","package":"gnhf","installed":{"npm_dir":"/opt/tool","npx_pin":"/opt/tool/run.sh"}}}
+{"name":"bad","published":{"source":"npm","package":"gnhf","installed":{"npm_dir":"opt/tool"}}}
+{"name":"bad","published":{"source":"npm","package":"gnhf","installed":{"folder":"/opt/tool"}}}
+{"name":"bad","published":{"source":"npm","package":"gnhf","installed":"/opt/tool"}}
+{"name":"bad","command":"herdr-fixture","probe_secs":0}
+{"name":"bad","command":"herdr-fixture","probe_secs":31}
+{"name":"bad","command":"herdr-fixture","probe_secs":2.5}
+{"name":"bad","command":"herdr-fixture","probe_secs":"5"}
 {"command":"herdr-fixture"}
 {"name":"bad"}
 {"name":"bad","command":"bad command"}
@@ -1004,6 +1019,7 @@ test_published_numeric_comparison_and_failed_installed_command() {
   while read -r installed published verdict; do
     make_copy "$dir" "$TOOL" "$installed"
     printf '{"version":"%s"}\n' "$published" > "$home/response"
+    rm -f "$home/state/.tool-updates"
     run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
     if [ "$verdict" = newer ]; then
       assert_contains "$(cat "$out")" 'gnhf update available:' "numeric comparison missed $published > $installed"
@@ -1020,10 +1036,304 @@ v000.010.0 0.10 silent
 EOF
   # Failure output can contain a version, but is not a usable installed answer.
   printf '#!/bin/sh\nprintf "0.8.0\\n"\nexit 1\n' > "$dir/$TOOL"
+  rm -f "$home/state/.tool-updates"
   run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   assert_contains "$(cat "$out")" "exited 1, so its version was not compared with the published release" "failed installed command was treated as usable"
   assert_not_contains "$(cat "$out")" 'update available' "failed installed command supplied a comparison baseline"
   pass "published versions compare numeric components without overflow and require a successful installed answer"
+}
+
+# --- sweep scheduling and report identity -----------------------------------
+
+test_a_slow_tool_does_not_leave_the_tools_after_it_unchecked() {
+  local home slow stale fresh out report start elapsed
+  # 2026-09-19..20: the first watched tool's slow origin read spent the whole
+  # sweep budget, so almost every sweep ended "the time budget ran out before
+  # <second tool>" and the tools after it were never checked. Tools are checked
+  # side by side, so a slow one costs only its own time.
+  home=$(make_home side-by-side)
+  slow="$TMP_ROOT/side-by-side/slow/bin"
+  stale="$TMP_ROOT/side-by-side/old/bin"
+  fresh="$TMP_ROOT/side-by-side/new/bin"
+  make_slow_copy "$slow" slow-fixture 30
+  make_copy "$stale" "$TOOL" 'herdr 0.8.0'
+  make_copy "$fresh" "$TOOL" 'herdr 0.8.2'
+  write_config "$home" "{\"tools\":[{\"name\":\"slow\",\"command\":\"slow-fixture\"},{\"name\":\"herdr\",\"command\":\"$TOOL\"}]}"
+  out="$home/out.txt"
+  start=$(date +%s)
+  run_check "$home" "$(fixture_path "$slow:$stale:$fresh")" "$out" FM_TOOL_UPDATE_PROBE_SECS=30 FM_TOOL_UPDATE_BUDGET_SECS=4
+  elapsed=$(($(date +%s) - start))
+  report=$(cat "$out")
+  [ "$elapsed" -lt 20 ] || fail "a slow tool held the sweep past its budget: ${elapsed}s"
+  assert_contains "$report" "herdr update not in effect" "the tool after a slow one was not checked"
+  assert_not_contains "$report" "before herdr" "the tool after a slow one was reported as not reached"
+  assert_contains "$report" "slow check" "the slow tool was not reported as unanswered"
+  pass "a slow tool costs only its own time, and the tools after it are still checked"
+}
+
+# upstream_commit <clone>: one more commit on the shared origin branch.
+upstream_commit() {
+  local clone=$1
+  printf '%s\n' "$RANDOM" > "$clone/tip"
+  git -C "$clone" add tip
+  git -C "$clone" commit -qm tip
+  git -C "$clone" push -q origin main
+}
+
+test_upstream_commits_are_not_news_while_the_clone_stays_behind() {
+  local home work pusher out
+  # 2026-09-21: the report named the upstream tip ("origin/main is at c443d8c2596a
+  # which this copy does not have"), so every upstream commit re-reported an
+  # update that was already seen and deliberately deferred. Being behind is the
+  # fact; which commit it is behind is detail.
+  home=$(make_home git-tip)
+  work=$(git_fixture git-tip-repo)
+  git -C "$work" reset -q --hard HEAD~2
+  pusher="$TMP_ROOT/git-tip-pusher"
+  git clone -q "$TMP_ROOT/git-tip-repo.git" "$pusher" 2>/dev/null
+  write_config "$home" "{\"tools\":[{\"name\":\"firstmate\",\"git\":{\"repo\":\"$work\",\"remote\":\"origin\",\"branch\":\"main\"}}]}"
+  out="$home/out.txt"
+  run_check "$home" "$PATH" "$out"
+  assert_contains "$(cat "$out")" "firstmate update available" "the first sweep did not report the clone behind"
+  upstream_commit "$pusher"
+  run_check "$home" "$PATH" "$out"
+  [ ! -s "$out" ] || fail "an upstream commit re-reported a known update: $(cat "$out")"
+  upstream_commit "$pusher"
+  run_check "$home" "$PATH" "$out"
+  [ ! -s "$out" ] || fail "a second upstream commit re-reported a known update: $(cat "$out")"
+  # Catching up clears it, and falling behind again is news.
+  git -C "$work" pull -q --ff-only origin main
+  run_check "$home" "$PATH" "$out"
+  [ ! -s "$out" ] || fail "a clone that caught up still reported: $(cat "$out")"
+  upstream_commit "$pusher"
+  run_check "$home" "$PATH" "$out"
+  assert_contains "$(cat "$out")" "firstmate update available" "a clone that fell behind again was not reported"
+  pass "upstream commits are not news while the clone stays behind, and falling behind again is"
+}
+
+test_a_transient_failure_keeps_the_reported_update_and_is_said_once() {
+  local home work dir out t0
+  # 2026-09-19..20: each "origin did not answer" wrote a different finding set,
+  # which cleared the suppression, so the next answering sweep reported the same
+  # deferred update again, roughly every 35 minutes.
+  home=$(make_home git-flap)
+  work=$(git_fixture git-flap-repo)
+  git -C "$work" reset -q --hard HEAD~2
+  dir="$TMP_ROOT/git-flap/bin"
+  mkdir -p "$dir"
+  cat > "$dir/git" <<SH
+#!/usr/bin/env bash
+if [ -e '$TMP_ROOT/git-flap/offline' ]; then
+  for arg in "\$@"; do
+    [ "\$arg" != ls-remote ] || { printf 'fatal: unable to access\n' >&2; exit 128; }
+  done
+fi
+exec $(command -v git) "\$@"
+SH
+  chmod 0755 "$dir/git"
+  write_config "$home" "{\"tools\":[{\"name\":\"firstmate\",\"git\":{\"repo\":\"$work\",\"remote\":\"origin\",\"branch\":\"main\"}}]}"
+  out="$home/out.txt"
+  t0=1700000000
+
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$t0"
+  assert_contains "$(cat "$out")" "firstmate update available" "the first sweep did not report the clone behind"
+  touch "$TMP_ROOT/git-flap/offline"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 900))"
+  assert_contains "$(cat "$out")" "firstmate check failed: origin could not be reached or read from $work" "an unreachable origin was not reported"
+  rm "$TMP_ROOT/git-flap/offline"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 1800))"
+  [ ! -s "$out" ] || fail "an origin that answered again re-reported a known update: $(cat "$out")"
+  touch "$TMP_ROOT/git-flap/offline"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 2700))"
+  [ ! -s "$out" ] || fail "an origin that failed again on the next flip was reported again: $(cat "$out")"
+  rm "$TMP_ROOT/git-flap/offline"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 3600))"
+  [ ! -s "$out" ] || fail "the flapping origin re-reported a known update: $(cat "$out")"
+  # A failure that returns after a whole quiet day is news again.
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 2700 + 86400))"
+  [ ! -s "$out" ] || fail "a quiet sweep reported: $(cat "$out")"
+  touch "$TMP_ROOT/git-flap/offline"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 2700 + 86400 + 900))"
+  assert_contains "$(cat "$out")" "firstmate check failed: origin could not be reached" "a failure returning after a quiet day was not reported"
+  pass "a transient failure keeps the reported update, is said once per flapping spell, and again after a quiet day"
+}
+
+test_a_failed_published_read_keeps_the_reported_update() {
+  local home dir out
+  home=$(make_home release-flap)
+  dir="$home/bin"
+  out="$home/out.txt"
+  make_release_transport "$dir"
+  make_copy "$dir" "$TOOL" 'herdr 0.8.0'
+  write_release_config "$home" herdr github herdrdev/herdr
+  printf '%s\n' '{"tag_name":"v0.8.2"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "herdr update available: installed 0.8.0, published 0.8.2" "the published update was not reported"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log" FM_RELEASE_STATUS=7
+  assert_contains "$(cat "$out")" "could not be reached or read (exit 7)" "a failed published read was not reported"
+  assert_not_contains "$(cat "$out")" "update available" "a failed published read reported an update"
+  # A newer release while the update is still pending is detail, not news.
+  printf '%s\n' '{"tag_name":"v0.8.3"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  [ ! -s "$out" ] || fail "the pending published update was reported again after a failed read: $(cat "$out")"
+  pass "a failed published read keeps the update already reported"
+}
+
+test_an_unfinished_tool_is_named_and_a_flip_is_not_news() {
+  local home dir slow stale fresh out clock t0 report
+  # A tool whose worker is still running when the sweep stops waiting is named as
+  # unfinished. That describes the sweep, not the tools, so a sweep that
+  # finishes and one that does not are not different news: on 2026-09-20 exactly
+  # that flip re-reported an unchanged pending update 18 minutes apart.
+  home=$(make_home unfinished)
+  dir="$TMP_ROOT/unfinished/clock"
+  clock="$TMP_ROOT/unfinished/clock-now"
+  make_budget_clock "$dir" "$clock"
+  slow="$TMP_ROOT/unfinished/slow/bin"
+  stale="$TMP_ROOT/unfinished/old/bin"
+  fresh="$TMP_ROOT/unfinished/new/bin"
+  mkdir -p "$slow"
+  # With the flag set, the copy lets the other tool finish, then moves the
+  # sweep's clock well past its deadline and keeps running, the way a worker
+  # stuck on a stalled read would.
+  cat > "$slow/slow-fixture" <<SH
+#!/usr/bin/env bash
+if [ -e '$TMP_ROOT/unfinished/stall' ]; then
+  sleep 4
+  printf '200\n' > '$clock'
+  sleep 20
+fi
+printf 'slow 1.0.0\n'
+SH
+  chmod 0755 "$slow/slow-fixture"
+  make_copy "$stale" "$TOOL" 'herdr 0.8.0'
+  make_copy "$fresh" "$TOOL" 'herdr 0.8.2'
+  write_config "$home" "{\"tools\":[{\"name\":\"slow\",\"command\":\"slow-fixture\",\"probe_secs\":30},{\"name\":\"herdr\",\"command\":\"$TOOL\"}]}"
+  out="$home/out.txt"
+  t0=1700000000
+
+  run_check "$home" "$(fixture_path "$dir:$slow:$stale:$fresh")" "$out" FM_TOOL_UPDATE_NOW="$t0"
+  assert_contains "$(cat "$out")" "herdr update not in effect" "the pending update was not reported"
+
+  touch "$TMP_ROOT/unfinished/stall"
+  printf '100\n' > "$clock"
+  run_check "$home" "$(fixture_path "$dir:$slow:$stale:$fresh")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 900))"
+  report=$(cat "$out")
+  assert_contains "$report" "tool updates: check incomplete: the time budget ran out before slow finished" "an unfinished tool was not named as the news"
+  assert_contains "$report" "already reported: herdr update not in effect" "the pending update was not listed as already reported"
+
+  rm "$TMP_ROOT/unfinished/stall"
+  printf '100\n' > "$clock"
+  run_check "$home" "$(fixture_path "$dir:$slow:$stale:$fresh")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 1800))"
+  [ ! -s "$out" ] || fail "a sweep that finished after one that did not re-reported: $(cat "$out")"
+
+  touch "$TMP_ROOT/unfinished/stall"
+  printf '100\n' > "$clock"
+  run_check "$home" "$(fixture_path "$dir:$slow:$stale:$fresh")" "$out" FM_TOOL_UPDATE_NOW="$((t0 + 2700))"
+  [ ! -s "$out" ] || fail "an unfinished sweep on the next flip was reported again: $(cat "$out")"
+  pass "an unfinished tool is named once, and a flip between finished and unfinished sweeps is not news"
+}
+
+test_a_tool_probe_secs_gives_a_slow_tool_its_own_bound() {
+  local home dir out
+  # 2026-09-21..22: on a loaded host `kimi --version` took 6-11 seconds against the
+  # fixed 5 second bound, so its check failed whenever the fleet was busy. A
+  # tool's own probe_secs gives it a longer bound without raising every probe's.
+  home=$(make_home probe-secs)
+  dir="$TMP_ROOT/probe-secs/bin"
+  mkdir -p "$dir"
+  printf '#!/usr/bin/env bash\nsleep 3\nprintf "kimi 1.0.0\\n"\n' > "$dir/kimi-fixture"
+  chmod 0755 "$dir/kimi-fixture"
+  out="$home/out.txt"
+  write_config "$home" '{"tools":[{"name":"kimi","command":"kimi-fixture"}]}'
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_PROBE_SECS=1
+  assert_contains "$(cat "$out")" "kimi check failed: $dir/kimi-fixture did not report a version" "the slow copy answered inside a bound it cannot meet, so this case proves nothing"
+  write_config "$home" '{"tools":[{"name":"kimi","command":"kimi-fixture","probe_secs":15}]}'
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_PROBE_SECS=1
+  [ ! -s "$out" ] || fail "a tool's own probe_secs did not give it a longer bound: $(cat "$out")"
+  pass "a tool's probe_secs overrides the default probe bound for that tool"
+}
+
+test_npm_packages_outside_path_are_compared_with_the_registry() {
+  local home dir mcp out report
+  # MCP servers run from their own folders through npx, so no copy is on PATH.
+  # Their installed version is the one in the folder's node_modules, or the one
+  # a launcher pins as <package>@<version>.
+  home=$(make_home npm-installed)
+  dir="$home/bin"
+  mcp="$home/mcp"
+  out="$home/out.txt"
+  make_release_transport "$dir"
+  mkdir -p "$mcp/exa/node_modules/exa-mcp-server" "$mcp/brave/node_modules/@brave/brave-search-mcp-server" "$mcp/dfs" "$mcp/empty"
+  printf '{"name":"exa-mcp-server","version":"3.1.0"}\n' > "$mcp/exa/node_modules/exa-mcp-server/package.json"
+  printf '{"name":"@brave/brave-search-mcp-server","version":"2.0.85"}\n' > "$mcp/brave/node_modules/@brave/brave-search-mcp-server/package.json"
+  # The first pin belongs to a longer name that ends the same way.
+  printf '#!/usr/bin/env bash\n# exec npx -y other-dataforseo-mcp-server@9.9.9\nexec npx -y dataforseo-mcp-server@2.9.8\n' > "$mcp/dfs/launch.sh"
+  printf '#!/usr/bin/env bash\nexec npx -y dataforseo-mcp-server@latest\n' > "$mcp/dfs/latest.sh"
+  jq -n --arg mcp "$mcp" '{tools: [
+    {name: "exa", published: {source: "npm", package: "exa-mcp-server", installed: {npm_dir: ($mcp + "/exa")}}},
+    {name: "brave", published: {source: "npm", package: "@brave/brave-search-mcp-server", installed: {npm_dir: ($mcp + "/brave")}}},
+    {name: "dfs", published: {source: "npm", package: "dataforseo-mcp-server", installed: {npx_pin: ($mcp + "/dfs/launch.sh")}}}
+  ]}' > "$home/config/watched-tools.json"
+  printf '%s\n' '{"version":"3.2.0"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  report=$(cat "$out")
+  assert_contains "$report" "exa update available: installed 3.1.0, published 3.2.0 at https://registry.npmjs.org/exa-mcp-server/latest" "a node_modules install was not compared"
+  assert_contains "$report" "brave update available: installed 2.0.85, published 3.2.0 at https://registry.npmjs.org/%40brave%2Fbrave-search-mcp-server/latest" "a scoped node_modules install was not compared"
+  assert_contains "$report" "dfs update available: installed 2.9.8, published 3.2.0" "a launcher pin was not compared"
+  assert_not_contains "$report" "9.9.9" "a pin for a longer package name was read as this one"
+
+  printf '%s\n' '{"version":"2.0.85"}' > "$home/response"
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_not_contains "$(cat "$out")" "brave update" "an install equal to the published version was reported"
+
+  jq -n --arg mcp "$mcp" '{tools: [
+    {name: "exa", published: {source: "npm", package: "exa-mcp-server", installed: {npm_dir: ($mcp + "/empty")}}},
+    {name: "dfs", published: {source: "npm", package: "dataforseo-mcp-server", installed: {npx_pin: ($mcp + "/dfs/latest.sh")}}}
+  ]}' > "$home/config/watched-tools.json"
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  report=$(cat "$out")
+  assert_contains "$report" "exa check failed: no version of exa-mcp-server could be read from $mcp/empty/node_modules" "a missing install was not a check failure"
+  assert_contains "$report" "dfs check failed: no numbered dataforseo-mcp-server@<version> pin could be read from $mcp/dfs/latest.sh" "an unpinned launcher was not a check failure"
+  pass "npm packages outside PATH are compared from node_modules or a launcher pin"
+}
+
+test_an_announcement_command_that_fails_is_a_check_failure() {
+  local home dir out
+  # 2026-09-23: a firewall rule blocked no-mistakes' own update request, and a
+  # failing announcement probe read as no update while three minor versions
+  # behind. A command that fails without announcing anything has not said
+  # "no update".
+  home=$(make_home announce-fails)
+  dir="$TMP_ROOT/announce-fails/bin"
+  mkdir -p "$dir"
+  cat > "$dir/no-mistakes-fixture" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'no-mistakes version v1.46.0\n'
+  exit 0
+fi
+case "${FM_ANNOUNCE_MODE:-}" in
+  blocked) printf 'error: dial tcp: connection refused\n' >&2; exit 1 ;;
+  news) printf 'A new version of no-mistakes is available: v1.46.0 -> v1.53.0\n' >&2; exit 1 ;;
+esac
+printf 'up to date\n'
+SH
+  chmod 0755 "$dir/no-mistakes-fixture"
+  write_config "$home" '{"tools":[{"name":"no-mistakes","command":"no-mistakes-fixture","version_args":["--version"],"announce_args":["update","--check"],"announce_pattern":"A new version of no-mistakes is available: [^ ]+ -> [^ ]+"}]}'
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_ANNOUNCE_MODE=blocked
+  assert_contains "$(cat "$out")" "no-mistakes check failed: $dir/no-mistakes-fixture exited 1 without an update announcement" "a failing announcement command read as no update"
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$(fixture_path "$dir")" "$out"
+  [ ! -s "$out" ] || fail "an announcement command that answered with no news reported: $(cat "$out")"
+  rm -f "$home/state/.tool-updates"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_ANNOUNCE_MODE=news
+  assert_contains "$(cat "$out")" "no-mistakes update available: A new version of no-mistakes is available: v1.46.0 -> v1.53.0" "an announcement from a command that also exited non-zero was lost"
+  pass "an announcement command that fails without announcing is a check failure, not silence"
 }
 
 # --- registry and reporting contract ----------------------------------------
@@ -1049,7 +1359,7 @@ test_malformed_registry_is_reported_not_ignored() {
   printf '%s\n' '{"tools":[{"name":"herdr"}]}' > "$home/config/watched-tools.json"
   rm -f "$home/state/.tool-updates"
   run_check "$home" "$PATH" "$out"
-  assert_contains "$(cat "$out")" "tool herdr needs command, git, or both" "a tool entry with no update source was accepted"
+  assert_contains "$(cat "$out")" "tool herdr needs command, git, or published.installed" "a tool entry with no update source was accepted"
 
   printf '%s\n' '{"tools":[{"name":"herdr","command":"herdr; rm -rf /"}]}' > "$home/config/watched-tools.json"
   rm -f "$home/state/.tool-updates"
@@ -1063,7 +1373,7 @@ test_malformed_registry_is_reported_not_ignored() {
   pass "a malformed registry is reported instead of quietly skipped"
 }
 
-test_findings_are_reported_once_until_they_change() {
+test_findings_are_reported_once_until_their_condition_changes() {
   local home stale fresh out path
   home=$(make_home no-nag)
   stale="$TMP_ROOT/no-nag/old/bin"
@@ -1079,10 +1389,11 @@ test_findings_are_reported_once_until_they_change() {
   run_check "$home" "$path" "$out"
   [ ! -s "$out" ] || fail "the same pending update was reported twice: $(cat "$out")"
 
-  # A changed finding is news again.
+  # New detail of the same condition is not news: the tool was already reported
+  # as not in effect, and it still is.
   make_copy "$fresh" "$TOOL" 'herdr 0.9.0'
   run_check "$home" "$path" "$out"
-  assert_contains "$(cat "$out")" "0.9.0 is installed" "a changed finding was suppressed as a repeat"
+  [ ! -s "$out" ] || fail "new detail of an already reported condition was reported as news: $(cat "$out")"
 
   # Once the condition clears, the report clears with it, and a later return of
   # the same condition is reported again.
@@ -1092,7 +1403,7 @@ test_findings_are_reported_once_until_they_change() {
   make_copy "$stale" "$TOOL" 'herdr 0.8.0'
   run_check "$home" "$path" "$out"
   assert_contains "$(cat "$out")" "PATH resolves 0.8.0" "a returning finding was not reported again"
-  pass "the same pending update is reported once, and a change is reported again"
+  pass "a condition is reported once, not again for new detail, and again when it returns"
 }
 
 test_an_overlong_report_says_it_was_cut() {
@@ -1115,9 +1426,10 @@ test_an_overlong_report_says_it_was_cut() {
 
 test_a_finding_past_the_cut_is_still_reported() {
   local home stale fresh out report i tools_json=
-  # Once a report is long enough to be cut, a new finding lands past the cut and
-  # leaves the printed line unchanged. It still has to count as news, or the PATH
-  # skew this check exists for would be suppressed for good on a busy home.
+  # Once a report is long enough to be cut, a new finding in config order lands
+  # past the cut. It still has to count as news, or the PATH skew this check
+  # exists for would be suppressed for good on a busy home, and it has to lead
+  # the line, or the wake would carry everything except its own reason.
   home=$(make_home past-cut)
   stale="$TMP_ROOT/past-cut/mise/installs/herdr/latest/bin"
   fresh="$TMP_ROOT/past-cut/local/bin"
@@ -1132,13 +1444,14 @@ test_a_finding_past_the_cut_is_still_reported() {
   run_check "$home" "$(fixture_path "$stale:$fresh")" "$out"
   assert_contains "$(cat "$out")" "[truncated]" "the first report was not long enough to be cut, so this case proves nothing"
 
-  # The skew tool goes last, so its finding falls past the cut and the printed
-  # line is byte identical to the one the first sweep already recorded.
+  # The skew tool goes last, so in config order its finding falls past the cut.
   write_config "$home" "{\"tools\":[$tools_json,{\"name\":\"herdr\",\"command\":\"$TOOL\"}]}"
   run_check "$home" "$(fixture_path "$stale:$fresh")" "$out"
   report=$(cat "$out")
   [ -n "$report" ] || fail "a finding past the cut produced no report at all, so it can never reach the watcher"
   assert_contains "$report" "[truncated]" "the second report was not cut, so the finding was not past the cut"
+  assert_contains "$report" "tool updates: herdr update not in effect" "the new finding did not lead the cut report"
+  assert_contains "$report" "already reported: absent-tool-1 check failed" "what was already reported did not follow the news"
   pass "a finding that lands past the cut is still reported as news"
 }
 
@@ -1155,7 +1468,7 @@ test_probes_are_skipped_between_intervals() {
   FM_HOME="$home" PATH="$(fixture_path "$dir")" FM_CHECK_TIMEOUT=30 FM_TOOL_UPDATE_INTERVAL=900 FM_TOOL_UPDATE_NOW="$now" \
     "$CHECK" >"$out" 2>&1 || status=$?
   expect_code 0 "$status" "first cadence run exit"
-  assert_grep 'fm-tool-updates-v1' "$home/state/.tool-updates" "the first run did not record its sweep"
+  assert_grep 'epoch=1700000000' "$home/state/.tool-updates" "the first run did not record its sweep"
 
   # A finding appears, but the interval has not elapsed, so no probe runs.
   make_copy "$dir" "$TOOL" 'no version here'
@@ -1451,9 +1764,17 @@ test_missing_branch_on_a_readable_remote_is_still_reported
 test_git_probes_stop_when_the_sweep_budget_is_gone
 test_a_git_probe_that_does_not_answer_is_not_an_update
 test_a_stalled_repository_probe_is_not_reported_as_not_a_repository
+test_a_slow_tool_does_not_leave_the_tools_after_it_unchecked
+test_upstream_commits_are_not_news_while_the_clone_stays_behind
+test_a_transient_failure_keeps_the_reported_update_and_is_said_once
+test_a_failed_published_read_keeps_the_reported_update
+test_an_unfinished_tool_is_named_and_a_flip_is_not_news
+test_a_tool_probe_secs_gives_a_slow_tool_its_own_bound
+test_npm_packages_outside_path_are_compared_with_the_registry
+test_an_announcement_command_that_fails_is_a_check_failure
 test_absent_registry_is_silent
 test_malformed_registry_is_reported_not_ignored
-test_findings_are_reported_once_until_they_change
+test_findings_are_reported_once_until_their_condition_changes
 test_an_overlong_report_says_it_was_cut
 test_a_finding_past_the_cut_is_still_reported
 test_probes_are_skipped_between_intervals
