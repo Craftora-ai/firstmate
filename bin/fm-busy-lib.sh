@@ -304,6 +304,8 @@ fm_busy_record_read() {  # <state-dir> <id>
   fm_busy_token_valid "$r_event" || { printf 'malformed'; return 1; }
   case "$r_seq" in ''|*[!0-9]*) printf 'malformed'; return 1 ;; esac
   case "$r_ts" in ''|*[!0-9]*) printf 'malformed'; return 1 ;; esac
+  # Bash interprets a leading zero as octal in the watcher's age arithmetic.
+  case "$r_ts" in 0|[1-9]*) : ;; *) printf 'malformed'; return 1 ;; esac
   case "$r_state" in busy|idle|unknown) : ;; *) printf 'malformed'; return 1 ;; esac
   if [ "$r_gen" != "$gen" ]; then
     printf 'gen-mismatch'

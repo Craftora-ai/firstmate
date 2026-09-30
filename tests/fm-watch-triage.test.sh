@@ -2424,7 +2424,7 @@ test_nonterminal_stale_provably_working_absorbed_then_escalated() {
 # the old busy record remains) is aged from its own start too.
 test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
   local variant dir state fakebin out capture_file window key gen pane pid now harness source
-  for variant in fresh-turn interrupted-turn over-age-turn repeated-busy-turn idle-pane; do
+  for variant in fresh-turn interrupted-turn over-age-turn repeated-busy-turn zero-padded-ts idle-pane; do
     dir=$(make_case "long-turn-$variant"); state="$dir/state"; fakebin="$dir/fakebin"
     out="$dir/watch.out"; capture_file="$dir/pane.txt"; window="test:fm-long-$variant"
     harness=claude; source=claude-hook
@@ -2436,16 +2436,26 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
     printf 'working: planning\n' > "$state/long-$variant.status"
     printf '%s' "$(seen_sig "$state/long-$variant.status")" > "$state/.seen-long-${variant}_status"
     gen=$("$ROOT/bin/fm-busy-event.sh" arm "$state" "long-$variant")
-    "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" idle --gen "$gen" \
-      --source "$source" --event stop
+    if [ "$variant" = repeated-busy-turn ]; then
+      "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" idle --gen "$gen" \
+        --source "$source" --event session-status-idle
+    else
+      "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" idle --gen "$gen" \
+        --source "$source" --event stop
+    fi
     touch "$state/long-$variant.turn-ended"
     now=$(date +%s)
     set_mtime $(( now - 7200 )) "$state/long-$variant.turn-ended"
     set_mtime $(( now - 90000 )) "$state/long-$variant.meta"
     prime_turnend_seen "$state/long-$variant.turn-ended"
     if [ "$variant" != idle-pane ]; then
-      "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
-        --source "$source" --event user-prompt-submit
+      if [ "$variant" = repeated-busy-turn ]; then
+        "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
+          --source "$source" --event session-busy
+      else
+        "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
+          --source "$source" --event user-prompt-submit
+      fi
     fi
     case "$variant" in
       interrupted-turn|over-age-turn|repeated-busy-turn)
@@ -2455,6 +2465,8 @@ test_long_busy_turn_after_idle_gap_is_aged_from_turn_start() {
       repeated-busy-turn)
         "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
           --source "$source" --event session-retry ;;
+      zero-padded-ts)
+        backdate_busy_turn_start "$state" "long-$variant" 08 ;;
       interrupted-turn)
         "$ROOT/bin/fm-busy-event.sh" apply "$state" "long-$variant" busy --gen "$gen" \
           --source "$source" --event user-prompt-submit ;;
