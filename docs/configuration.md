@@ -1415,7 +1415,7 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 - A tool going from current to behind, or a tool joining the list, is news, and so is a condition that cleared and returned.
 - A source that reached no answer on a sweep (a timed-out probe, an unreachable remote, a tool the sweep had to stop waiting for) keeps what was recorded for it, so a transient failure never makes an already reported update news again; a recorded update is kept only while none of the tool's update sources (the announcement, the published release, the git remote) answered, and is forgotten once any of them answered and none reported it, so a source that keeps failing never hides the tool's next update.
 - A check failure and an unfinished sweep are remembered apart from updates and are news again only after a whole day without them, so a source that flips between answering and not is reported once rather than on every flip.
-- When anything is news, the report line lists the news first and then, after `already reported:`, whatever else still needs attention; an update two sources found in the same sweep is listed once.
+- When anything is news, the report line lists the news first and then, after `already reported:`, whatever else still needs attention; an update several sources found in the same sweep is listed once, by the line naming the newest target version, and when the versions tie or cannot be compared (a git update names none) by the published release's line.
 - Adding, removing, or changing a watched tool is an edit to this file and needs no code change or re-arming.
 - This file is not inherited by secondmate homes, so each home watches the tools it actually depends on.
 

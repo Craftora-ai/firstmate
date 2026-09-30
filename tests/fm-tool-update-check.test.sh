@@ -1000,8 +1000,9 @@ test_published_dedupe_and_composition() {
   printf '%s\n' '{"version":"0.8.3"}' > "$home/response"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   [ ! -s "$out" ] || fail "a published release confirming the announced update was news: $(cat "$out")"
-  # One update is listed by its first text, so the announcement goes quiet here
-  # for the published line to show which installed copy it was compared with.
+  # One update is listed by the line naming the newest target, so the newer
+  # announcement goes quiet here for the published line to show which installed
+  # copy it was compared with.
   make_copy "$dir" "$TOOL" 'herdr 0.8.0'
   rm -f "$home/state/.tool-updates"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
@@ -1517,10 +1518,35 @@ SH
   printf '%s\n' '{"tag_name":"v1.79.0"}' > "$home/response"
   out="$home/out.txt"
   run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
-  assert_contains "$(cat "$out")" "tool updates: no-mistakes update available: A new version of no-mistakes is available: v1.75.2 -> v1.79.0" "the update was not reported"
+  assert_contains "$(cat "$out")" "tool updates: no-mistakes update available: installed 1.75.2, published 1.79.0" "the update was not reported by the published line its announcement ties with"
   count=$(grep -o 'no-mistakes update available' "$out" | wc -l | tr -d ' ')
   [ "$count" = 1 ] || fail "one update found by two sources was listed $count times: $(cat "$out")"
   pass "one update found by two sources is listed once"
+}
+
+test_an_older_announcement_does_not_hide_the_newer_release() {
+  local home dir out
+  # An announcement can lag GitHub's latest release; the line naming the
+  # newest target is the one reported, whichever source printed first.
+  home=$(make_home older-announcement)
+  dir="$home/bin"
+  make_release_transport "$dir"
+  cat > "$dir/no-mistakes-fixture" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'no-mistakes version v1.75.2\n'
+  exit 0
+fi
+printf 'A new version of no-mistakes is available: v1.75.2 -> v1.78.0\n' >&2
+SH
+  chmod 0755 "$dir/no-mistakes-fixture"
+  write_config "$home" '{"tools":[{"name":"no-mistakes","command":"no-mistakes-fixture","version_args":["--version"],"announce_args":["update","--check"],"announce_pattern":"A new version of no-mistakes is available: [^ ]+ -> [^ ]+","published":{"source":"github","repo":"kunchenguid/no-mistakes"}}]}'
+  printf '%s\n' '{"tag_name":"v1.79.0"}' > "$home/response"
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "tool updates: no-mistakes update available: installed 1.75.2, published 1.79.0" "the newer published release was hidden behind an older announcement"
+  assert_not_contains "$(cat "$out")" "v1.78.0" "the older announcement was reported as the update"
+  pass "an older announcement does not hide the newer published release"
 }
 
 # --- registry and reporting contract ----------------------------------------
@@ -1966,6 +1992,7 @@ test_a_commented_npx_pin_is_not_the_installed_version
 test_persistent_sweep_warnings_are_reported_once
 test_a_timed_out_announcement_is_a_failure_whatever_it_printed
 test_one_update_found_by_two_sources_is_listed_once
+test_an_older_announcement_does_not_hide_the_newer_release
 test_absent_registry_is_silent
 test_malformed_registry_is_reported_not_ignored
 test_findings_are_reported_once_until_their_condition_changes

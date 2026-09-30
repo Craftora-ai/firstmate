@@ -102,7 +102,9 @@
 #
 # When anything is news, the one report line puts the news first and what was
 # already reported after it, so the reason for the wake survives the one-line
-# cut, and a finding two sources reported in one sweep is listed once. A sweep
+# cut. An update several sources found in one sweep is listed once, by the line
+# naming the newest target version; a tie, or a line naming no version (a git
+# update), yields to the published release's line. A sweep
 # the watcher kills writes no record and is retried.
 set -u
 export LC_ALL=C
@@ -248,10 +250,11 @@ DEADLINE=0
 # incomplete, budget-cut, registry, and failed for the sweep. An available update
 # is identified as <tool>/available, whichever source found it.
 #
-# A worker writes to its own output file, one line per finding and one line per
-# source that reached an answer:
+# A worker writes to its own output file, one line per finding, one line per
+# update a source found, and one line per source that reached an answer:
 #
 #   F <TAB> <key> <TAB> <text>
+#   U <TAB> <source> <TAB> <target version, or - when it names none> <TAB> <text>
 #   A <TAB> <source>
 #
 # A source that also reported a failure did not reach an answer, whatever else
@@ -271,8 +274,11 @@ finding() {
   finding_key "$WORKER_TOOL/$1/$2" "$3"
 }
 
+# update_available <source> <target version> <text>
 update_available() {
-  finding_key "$WORKER_TOOL/available" "$1"
+  local text
+  text=$(printf '%s' "$3" | tr '\t\r\n' '   ')
+  printf 'U\t%s\t%s\t%s\n' "$1" "${2:--}" "$text"
 }
 
 answered() {
@@ -585,7 +591,7 @@ EOF
         # naming a version already installed is not an available update.
         if [ -z "$announced_version" ] || [ -z "$best_version" ] \
           || version_newer "$announced_version" "$best_version"; then
-          update_available "$name update available: $matched_line"
+          update_available announce "$announced_version" "$name update available: $matched_line"
         fi
       elif [ "$announce_status" -ne 0 ]; then
         # A command that fails while fetching its own update news (a blocked
@@ -717,7 +723,7 @@ published_findings() {
   answered published
   version=${version#v}
   if version_newer "$version" "$installed"; then
-    update_available "$name update available: installed $installed, published $version at $url"
+    update_available published "$version" "$name update available: installed $installed, published $version at $url"
   fi
 }
 
@@ -859,13 +865,13 @@ git_findings() {
     esac
     if [ -n "$count" ]; then
       answered git
-      update_available "$name update available: $local_label is $(commit_phrase "$count") behind $remote/$branch"
+      update_available git '' "$name update available: $local_label is $(commit_phrase "$count") behind $remote/$branch"
       return 0
     fi
   fi
 
   answered git
-  update_available "$name update available: $remote/$branch is at $short which this copy does not have"
+  update_available git '' "$name update available: $remote/$branch is at $short which this copy does not have"
   return 0
 }
 
@@ -1029,19 +1035,45 @@ wait_for_workers() {
   done
 }
 
+# update_preferred <source> <version> <best source> <best version>: true when
+# the first update names a newer target than the best so far. Versions that tie
+# or cannot be compared (a git update names none) prefer the published release.
+update_preferred() {
+  if [ "$2" != - ] && [ "$4" != - ]; then
+    version_newer "$2" "$4" && return 0
+    version_newer "$4" "$2" && return 1
+  fi
+  [ "$1" = published ] && [ "$3" != published ]
+}
+
 collect_workers() {
-  local index name kind field text unfinished=
+  local index name kind field version text unfinished=
+  local update_source update_version update_text
   index=1
   while [ "$index" -le "$SWEEP_TOOLS" ]; do
     name=$(cat "$SWEEP_DIR/$index.name" 2>/dev/null)
+    update_text=
     if [ -f "$SWEEP_DIR/$index.out" ]; then
       while IFS='	' read -r kind field text; do
         case "$kind" in
           F) [ -z "$text" ] || add_current "$field" "$text" ;;
+          U)
+            # Sources can find the same update; the line naming the newest
+            # target speaks for all of them.
+            version=${text%%	*}
+            text=${text#*	}
+            if [ -n "$text" ] && { [ -z "$update_text" ] \
+              || update_preferred "$field" "$version" "$update_source" "$update_version"; }; then
+              update_source=$field
+              update_version=$version
+              update_text=$text
+            fi
+            ;;
           A) ANSWERED="${ANSWERED}$name/$field " ;;
         esac
       done < "$SWEEP_DIR/$index.out"
     fi
+    [ -z "$update_text" ] || add_current "$name/available" "$update_text"
     [ -e "$SWEEP_DIR/$index.done" ] || unfinished="${unfinished:+$unfinished, }$name"
     index=$((index + 1))
   done
@@ -1126,7 +1158,7 @@ EOF
 # --- actions ----------------------------------------------------------------
 
 action_check() {
-  local line now key text news='' known='' seen reported=' '
+  local line now key text news='' known='' seen
 
   [ -f "$CONFIG" ] || return 0
 
@@ -1165,11 +1197,6 @@ action_check() {
   # that currently needs attention.
   while IFS='	' read -r key text; do
     [ -n "$key" ] || continue
-    # Two sources can find the same update; its first text speaks for both.
-    case "$reported" in
-      *" $key "*) continue ;;
-    esac
-    reported="$reported$key "
     case "$RECORD_KEYS" in
       *" $key "*) known="${known:+$known; }$text" ;;
       *) news="${news:+$news; }$text" ;;
