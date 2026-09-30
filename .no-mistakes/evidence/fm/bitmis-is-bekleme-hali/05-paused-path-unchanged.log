@@ -1,0 +1,25 @@
+=== E (retry with live pane): paused: task keeps long quiet cadence, landing-wait ship stays quiet ===
+crew-state pausy: state: unknown · source: pane · harness state unavailable (unknown missing)
+[paused-1] watcher still running after 60s (no wake), stopped
+[paused-1] stdout:
+[paused-1] stderr:
+[paused-2] watcher exited after 3s with wake
+[paused-2] stdout:
+check: rearm-resurface
+[paused-2] stderr:
+[paused-2] drained wake queue:
+[paused-2] acked through 0
+[paused-3] watcher still running after 60s (no wake), stopped
+[paused-3] stdout:
+[paused-3] stderr:
+[paused-4] watcher exited after 2s with wake
+[paused-4] stdout:
+check: rearm-resurface
+[paused-4] stderr:
+[paused-4] drained wake queue:
+[paused-4] acked through 0
+pause tracking files:
+Ignoring clocale-0.0.4 because its extensions are not built. Try: gem pristine clocale --version 0.0.4
+       .paused-fm_fm-pausy 
+       .paused-rechecked-fm_fm-pausy 
+       .stale-fm_fm-pausy 

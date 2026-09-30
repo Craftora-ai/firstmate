@@ -1,0 +1,26 @@
+=== A: firstmate answers a keyed decision (resolved line appended) ===
+show: independent audit finishes
+rc=0
+crew-state: state: parked · source: landing-wait · awaiting landing: independent audit finishes · harness state unavailable (unknown missing)
+[answered] watcher still running after 60s (no wake), stopped
+[answered] stdout:
+[answered] stderr:
+
+=== B: worker resumes and writes working: (wait must stop suppressing) ===
+show: rc=1
+crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+[resumed-1] watcher exited after 2s with wake
+[resumed-1] stdout:
+check: rearm-resurface
+[resumed-1] stderr:
+[resumed-1] drained wake queue:
+[resumed-1] acked through 0
+[resumed-2] watcher exited after 9s with wake
+[resumed-2] stdout:
+signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.aLMmvf/state/finished.status
+[resumed-2] stderr:
+[resumed-2] drained wake queue:
+  1790786582	6	signal	finished.status	signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.aLMmvf/state/finished.status
+  wake annotation: unread wake-EVENT since last drain, not current state: finished.status: resolved [key=default]: audit answer recorded
+  wake annotation: latest wake-EVENT observed at drain, not current state: finished.status: working: resuming to fix an audit note
+[resumed-2] acked through 6

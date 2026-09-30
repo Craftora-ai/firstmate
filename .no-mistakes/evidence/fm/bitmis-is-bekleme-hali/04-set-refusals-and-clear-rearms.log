@@ -1,0 +1,43 @@
+=== D: set refusals ===
+status tail: working: resuming to fix an audit note
+error: landing wait requires a done declaration
+rc=1 (status not done)
+error: landing wait requires a clean committed ship on its recorded branch
+rc=1 (dirty worktree)
+error: reason must be a nonempty single line
+rc=2 (empty reason)
+error: reason must be a nonempty single line
+rc=2 (multiline reason)
+landing wait: finished: audit finishes
+rc=0 (valid: done + clean committed branch)
+after new commit on branch, show: rc=1
+landing wait: finished: audit finishes
+rebound rc=0
+
+=== C: clear re-arms stale monitoring ===
+landing wait cleared: finished
+show: rc=1
+[cleared-1] watcher exited after 7s with wake
+[cleared-1] stdout:
+signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.aLMmvf/state/finished.status
+[cleared-1] stderr:
+[cleared-1] drained wake queue:
+  1790786627	8	signal	finished.status	signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.aLMmvf/state/finished.status
+  wake annotation: latest wake-EVENT observed at drain, not current state: finished.status: done: audit note fixed, ready again
+  STATUS OUTCOME BACKSTOP (newest captain-facing task event has no covering branch outcome):
+  finished done: audit note fixed, ready again
+[cleared-1] acked through 8
+[cleared-2] watcher exited after 14s with wake
+[cleared-2] stdout:
+stale: fm:fm-finished
+[cleared-2] stderr:
+[cleared-2] drained wake queue:
+  1790786647	9	stale	fm:fm-finished	stale: fm:fm-finished
+[cleared-2] acked through 9
+[cleared-3] watcher exited after 25s with wake
+[cleared-3] stdout:
+stale: fm:fm-finished
+[cleared-3] stderr:
+[cleared-3] drained wake queue:
+  1790786681	10	stale	fm:fm-finished	stale: fm:fm-finished
+[cleared-3] acked through 10

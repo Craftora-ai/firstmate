@@ -1,0 +1,27 @@
+=== fm-landing-wait.sh set ===
+landing wait: finished: independent audit finishes
+rc=0
+show: independent audit finishes
+record: v1	strong:16777234:263374304:1790786012.902978450	62	316449060 62	873225147 166	d70bc15e271e4b9fbfb4ceaa89055ebbae66f37c	independent audit finishes
+status log byte-identical after set: done: committed on fm/finished, waiting for independent audit
+crew-state: state: parked · source: landing-wait · awaiting landing: independent audit finishes · harness state unavailable (unknown missing)
+=== AFTER landing wait: 4 watcher runs x 60s, pane changing every 15s ===
+[landing-1] watcher still running after 60s (no wake), stopped
+[landing-1] stdout:
+[landing-1] stderr:
+[landing-2] watcher exited after 2s with wake
+[landing-2] stdout:
+check: rearm-resurface
+[landing-2] stderr:
+[landing-2] drained wake queue:
+[landing-2] acked through 0
+[landing-3] watcher still running after 60s (no wake), stopped
+[landing-3] stdout:
+[landing-3] stderr:
+[landing-4] watcher exited after 2s with wake
+[landing-4] stdout:
+check: rearm-resurface
+[landing-4] stderr:
+[landing-4] drained wake queue:
+[landing-4] acked through 0
+status log still: done: committed on fm/finished, waiting for independent audit

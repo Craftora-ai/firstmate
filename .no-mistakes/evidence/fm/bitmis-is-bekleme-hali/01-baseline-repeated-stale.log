@@ -1,0 +1,22 @@
+=== BEFORE landing wait: finished ship (done:, committed branch fm/finished, bare shell pane = agent stopped) ===
+status: done: committed on fm/finished, waiting for independent audit
+[baseline-1] watcher exited after 3s with wake
+[baseline-1] stdout:
+check: rearm-resurface
+[baseline-1] stderr:
+[baseline-1] drained wake queue:
+[baseline-1] acked through 0
+[baseline-2] watcher exited after 11s with wake
+[baseline-2] stdout:
+stale: fm:fm-finished
+[baseline-2] stderr:
+[baseline-2] drained wake queue:
+  1790786267	3	stale	fm:fm-finished	stale: fm:fm-finished
+[baseline-2] acked through 3
+[baseline-3] watcher exited after 26s with wake
+[baseline-3] stdout:
+stale: fm:fm-finished
+[baseline-3] stderr:
+[baseline-3] drained wake queue:
+  1790786298	4	stale	fm:fm-finished	stale: fm:fm-finished
+[baseline-3] acked through 4
