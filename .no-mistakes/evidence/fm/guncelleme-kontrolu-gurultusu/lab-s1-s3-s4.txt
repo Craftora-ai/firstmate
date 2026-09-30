@@ -1,0 +1,40 @@
+
+### S1 slow first tools no longer leave the last tool unchecked (budget 20s)
+[NEW 14s] tool updates: firstmate update available: origin/main is at f6c70eb09835 which this copy does not have; treehouse update available: origin/main is at 4dc58b6881c8 which this copy does not have
+[OLD 20s] tool updates: firstmate update available: origin/main is at 88ca79e87401 which this copy does not have; treehouse update available: origin/main is at 86273e4889cd which this copy does not have
+
+### S3 a transient 'origin did not answer' failure keeps the reported update's suppression
+-- NEW sweep 1 (behind, remote reachable)
+[NEW 1s] tool updates: firstmate update available: origin/main is at 5180a70f7bf7 which this copy does not have
+-- NEW sweep 2 (remote unreachable)
+[NEW 0s] tool updates: firstmate check failed: origin could not be reached or read from /tmp/fm-lab-tuc01/s3NEW/repos/firstmate/copy
+-- NEW sweep 3 (remote back, same pending update)
+[NEW 0s] <silent>
+-- NEW sweep 4 (remote unreachable again)
+[NEW 1s] <silent>
+-- NEW sweep 5 (remote back again)
+[NEW 1s] <silent>
+-- OLD sweep 1 (behind, remote reachable)
+[OLD 1s] tool updates: firstmate update available: origin/main is at 06e2e78a56c9 which this copy does not have
+-- OLD sweep 2 (remote unreachable)
+[OLD 0s] tool updates: firstmate check failed: origin could not be reached or read from /tmp/fm-lab-tuc01/s3OLD/repos/firstmate/copy
+-- OLD sweep 3 (remote back, same pending update)
+[OLD 0s] tool updates: firstmate update available: origin/main is at 06e2e78a56c9 which this copy does not have
+-- OLD sweep 4 (remote unreachable again)
+[OLD 1s] tool updates: firstmate check failed: origin could not be reached or read from /tmp/fm-lab-tuc01/s3OLD/repos/firstmate/copy
+-- OLD sweep 5 (remote back again)
+[OLD 0s] tool updates: firstmate update available: origin/main is at 06e2e78a56c9 which this copy does not have
+
+### S4 a sweep that flips between incomplete and complete does not re-report the pending update
+-- NEW sweep 1 (treehouse hangs, budget 6s)
+[NEW 6s] tool updates: firstmate update available: origin/main is at 5ffd0760ab9f which this copy does not have; treehouse check failed: /tmp/fm-lab-tuc01/s4NEW/tools/treehouse did not report a version
+-- NEW sweep 2 (sweep finishes)
+[NEW 0s] <silent>
+-- NEW sweep 3 (treehouse hangs again)
+[NEW 6s] <silent>
+-- OLD sweep 1 (treehouse hangs, budget 6s)
+[OLD 6s] tool updates: firstmate update available: origin/main is at 8f9ccad951e2 which this copy does not have; treehouse check failed: /tmp/fm-lab-tuc01/s4OLD/tools/treehouse did not report a version
+-- OLD sweep 2 (sweep finishes)
+[OLD 0s] tool updates: firstmate update available: origin/main is at 8f9ccad951e2 which this copy does not have
+-- OLD sweep 3 (treehouse hangs again)
+[OLD 6s] tool updates: firstmate update available: origin/main is at 8f9ccad951e2 which this copy does not have; treehouse check failed: /tmp/fm-lab-tuc01/s4OLD/tools/treehouse did not report a version

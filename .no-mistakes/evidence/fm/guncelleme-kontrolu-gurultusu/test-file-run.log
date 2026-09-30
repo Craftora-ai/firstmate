@@ -1,0 +1,59 @@
+ok - published herdr, tasks-axi and gnhf report older fixtures and stay silent when equal or ahead
+ok - unreachable and unparseable published sources fail for their own tool and the sweep continues
+ok - published probes obey their bound, a hung source costs no other tool, and repeats are not news
+ok - a sweep whose last probe ends inside the grace is complete and keeps its cadence
+ok - a skipped published probe reports its budget failure once and a skipped copy is reported
+ok - arm and sweep refuse the whole registry for malformed entries
+ok - published sources compose with PATH skew, announcements and git, and confirming one pending update is not news
+ok - published versions compare numeric components without overflow and require a successful installed answer
+ok - PATH skew is reported by asking every copy on PATH for its own version
+ok - no report when PATH already resolves the newest installed copy
+ok - two copies of the same version are not skew
+ok - one copy reached through two PATH entries is probed once as one install
+ok - a copy that reports no version is a check failure, not a pass
+ok - a version probe that exits non-zero still reports its version
+ok - a watched command missing from PATH is reported
+ok - a tool's own update announcement is read from its output
+ok - an announcement naming an already-installed version is not also reported as an available update
+ok - an announcement naming a version newer than every installed copy is still reported as available
+ok - an announcement carried by another command is read from that command
+ok - an announce_pattern that cannot be used is reported instead of read as silence
+ok - a broken pattern is reported for its own tool and the rest of the sweep still reports
+ok - an announcement source the budget could not reach is reported, not read as current
+ok - an announcement probe that does not answer is reported, not read as current
+ok - a tool that announces nothing stays silent
+ok - commits behind the origin branch are reported without touching the repository
+ok - an omitted branch is detected from the remote's default branch
+ok - the default branch is asked of the remote when the clone has no local record
+ok - a repository that is current or ahead of its origin branch is silent
+ok - an unusable git source is reported as a check failure
+ok - a remote that cannot be read is reported as unreadable, not as a missing branch
+ok - a branch a readable remote does not have is still reported as missing
+ok - git probes stop and name their tool once the sweep budget is gone
+ok - a git probe that does not answer is reported as a failure, never as an update
+ok - a stalled repository probe is reported as no answer, not as not a repository
+ok - a slow tool costs only its own time, and the tools after it are still checked
+ok - upstream commits are not news while the clone stays behind, and falling behind again is
+ok - a transient failure keeps the reported update, is said once per flapping spell, and again after a quiet day
+ok - a failed published read keeps the update already reported
+ok - an unfinished tool is named once, and a flip between finished and unfinished sweeps is not news
+ok - a tool's probe_secs overrides the default probe bound for that tool
+ok - npm packages outside PATH are compared from node_modules or a launcher pin
+ok - an announcement command that fails without announcing is a check failure, not silence
+ok - a second source confirming an already reported update is not news
+ok - a source that keeps failing does not hide the tool's next update
+ok - no watched tool registry means no output at all
+ok - a malformed registry is reported instead of quietly skipped
+ok - a condition is reported once, not again for new detail, and again when it returns
+ok - an over-long report is cut with the shared truncation marker
+ok - a finding that lands past the cut is still reported as news
+ok - probes run once per interval, not on every poll
+ok - a budget that cannot fit the watcher bound is cut and reported, and the sweep keeps working
+ok - an out of range bound or unknown action refuses instead of guessing
+ok - arm registers a trusted check and disarm removes every trace
+ok - a symlink at the shim path is refused instead of followed
+ok - a failed registration never leaves a shim without a matching trust binding
+ok - a re-arm that loses the trust binding leaves no shim behind
+ok - a relative home is resolved before it is persisted into the shim
+ok - the armed check reaches the watcher as an ordinary check wake
+bash tests/fm-tool-update-check.test.sh  27.20s user 37.53s system 40% cpu 2:41.69 total

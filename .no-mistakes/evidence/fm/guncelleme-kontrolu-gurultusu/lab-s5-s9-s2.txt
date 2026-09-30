@@ -1,0 +1,31 @@
+
+### S5 a blocked announce probe (LuLu-style) is a check failure, not silence
+[NEW 1s] tool updates: no-mistakes check failed: /tmp/fm-lab-tuc01/s5NEW/tools/no-mistakes exited 1 without an update announcement, so none could be read
+[OLD 1s] <silent>
+
+### S9 per-tool probe_secs lets a slow binary (kimi under load) answer
+-- without probe_secs (default 5s)
+[NEW 6s] tool updates: kimi check failed: /tmp/fm-lab-tuc01/s9/tools/kimi did not report a version
+-- with probe_secs 15
+[NEW 7s] <silent>
+
+### S2 a new upstream commit while the clone stays behind is not news
+-- NEW sweep 1 (clone 1 behind)
+[NEW 1s] tool updates: firstmate update available: origin/main is at c49eccf3862c which this copy does not have
+-- NEW sweep 2 (someone else committed upstream; clone now 2 behind)
+[NEW 1s] <silent>
+-- NEW sweep 3 (another upstream commit)
+[NEW 0s] <silent>
+-- OLD sweep 1 (clone 1 behind)
+[OLD 1s] tool updates: firstmate update available: origin/main is at 470dcc65257d which this copy does not have
+-- OLD sweep 2 (someone else committed upstream; clone now 2 behind)
+[OLD 1s] tool updates: firstmate update available: origin/main is at 7484c72e6bac which this copy does not have
+-- OLD sweep 3 (another upstream commit)
+[OLD 0s] tool updates: firstmate update available: origin/main is at 42a6d7afcfb7 which this copy does not have
+-- NEW record file:
+fm-tool-updates-v2
+epoch=1790785076
+seen=1790785076 firstmate/available
+-- NEW: clone catches up, then falls behind again (current -> behind is news)
+[NEW 0s] <silent>
+[NEW 1s] tool updates: firstmate update available: origin/main is at befaf4f586a5 which this copy does not have

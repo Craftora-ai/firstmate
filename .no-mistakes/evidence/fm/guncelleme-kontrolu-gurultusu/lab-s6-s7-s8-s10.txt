@@ -1,0 +1,37 @@
+
+### S6 npm and GitHub release probes against the real public registries
+-- sweep 1
+[NEW 1s] tool updates: tasks-axi update available: installed 0.2.5, published 0.2.6 at https://registry.npmjs.org/tasks-axi/latest; lavish-axi update available: installed 0.1.71, published 0.1.80 at https://registry.npmjs.org/lavish-axi/latest; no-mistakes update available: installed 1.75.2, published 1.84.0 at https://api.github.com/repos/kunchenguid/no-mistakes/releases/latest
+-- sweep 2 (nothing changed)
+[NEW 1s] <silent>
+
+### S7 announce blocked + published reports; once announce answers the same update it is not news
+-- sweep 1 (announce blocked)
+[NEW 2s] tool updates: no-mistakes check failed: /tmp/fm-lab-tuc01/s7/tools/no-mistakes exited 1 without an update announcement, so none could be read; no-mistakes update available: installed 1.75.2, published 1.84.0 at https://api.github.com/repos/kunchenguid/no-mistakes/releases/latest
+-- sweep 2 (block lifted, announcement for the same update)
+[NEW 0s] <silent>
+fm-tool-updates-v2
+epoch=1790785270
+seen=1790785270 no-mistakes/available
+seen=1790785268 no-mistakes/announce/failed
+
+### S8 a source that keeps failing does not hide the tool's next update
+-- sweep 1 (announce fails, git behind)
+[NEW 2s] tool updates: firstmate check failed: /tmp/fm-lab-tuc01/s8/tools/firstmate exited 1 without an update announcement, so none could be read; firstmate update available: origin/main is at ad5f6ccf3e46 which this copy does not have
+-- sweep 2 (update installed; announce still fails)
+[NEW 1s] <silent>
+-- sweep 3 (a newer upstream commit)
+[NEW 1s] tool updates: firstmate update available: origin/main is at 0d17ebc72357 which this copy does not have; already reported: firstmate check failed: /tmp/fm-lab-tuc01/s8/tools/firstmate exited 1 without an update announcement, so none could be read
+
+### S10 arm installs the watcher shim, the shim reports, disarm removes it
+armed: state/tool-updates.check.sh
+arm exit 0
+tool-updates.check-trust
+tool-updates.check.sh
+-- shim run 1:
+tool updates: treehouse update available: origin/main is at 5938361cd1f7 which this copy does not have
+exit 0
+-- shim run 2 (upstream advanced):
+exit 0 (silent above = pass)
+disarmed: state/tool-updates.check.sh
+disarm exit 0

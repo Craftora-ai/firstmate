@@ -1,0 +1,4 @@
+
+### S1 slow first tools no longer leave the last tool unchecked (budget 20s)
+[NEW 14s] tool updates: firstmate update available: origin/main is at 734bc4d4bfc2 which this copy does not have; treehouse update available: origin/main is at ffa75b0cc37b which this copy does not have
+[OLD 21s] tool updates: firstmate update available: origin/main is at 2a80c876336a which this copy does not have; higgsfield-skills check failed: /tmp/fm-lab-tuc01/s1OLD/tools/higgsfield did not report a version; check incomplete: the time budget ran out before treehouse
