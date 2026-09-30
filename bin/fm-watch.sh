@@ -3009,8 +3009,8 @@ EOF
     if window_is_busy "$w" "$tail40"; then busy_now=0; else busy_now=1; fi
     if [ "$busy_now" -ne 0 ] && fm_landing_wait_read "$STATE" "$task" >/dev/null; then
       # The supervisor already owns this finished ship's external dependency.
-      # Inbox loss detection and actionable status scanning ran above; checks
-      # still run below. Drop stale history so clearing the wait re-arms it.
+      # Inbox loss detection, actionable status scanning, and the check sweep
+      # ran above. Drop stale history so clearing the wait re-arms it.
       rm -f "$sf" "$ssf" "$ewf" "$cf"
       continue
     fi
