@@ -2731,6 +2731,39 @@ test_landing_wait_quiets_stopped_ship() {
   pass "finished ships stay quiet across watcher restarts and postures; answers preserve waits and failures still wake"
 }
 
+# An unavailable harness-state probe is not confirmation that a landing-wait
+# ship is quiet: a live Rovo agent reads unknown and keeps stale supervision,
+# while the same unknown over a pane holding only a shell is a gone endpoint.
+test_landing_wait_unknown_probe_keeps_stale() {
+  local dir state fakebin window key pid
+  dir=$(make_case landing-unknown); state="$dir/state"; fakebin="$dir/fakebin"
+  window=test:fm-finished; key=test_fm-finished
+  landing_fixture "$dir"
+  sed 's/^harness=grok$/harness=rovo/' "$state/finished.meta" > "$state/rovo.meta"
+  mv "$state/rovo.meta" "$state/finished.meta"
+  prime_turnend_seen "$state/finished.status"
+  landing_command "$state" set --reason 'independent audit finishes' >/dev/null || fail "cannot set unknown-probe wait"
+  printf 'agent quiet, state unknown\n' > "$dir/pane"
+  printf '%s' "$(hash_text "$(cat "$dir/pane")")" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=zsh FM_FAKE_CREW_STATE='state: stopped · source: pane · bare shell' \
+    watch_bg "$state" "$fakebin" "$dir/out" env
+  pid=$!
+  wait_poll_cycle "$state" "$pid" || { reap "$pid"; fail "gone endpoint under a landing wait raised a wake: $(cat "$dir/out")"; }
+  reap "$pid"
+  ack_stopped_cycle "$state" || fail "could not acknowledge test stop"
+  printf '%s' "$(hash_text "$(cat "$dir/pane")")" > "$state/.hash-$key"
+  printf '1\n' > "$state/.count-$key"
+  PATH="$fakebin:$PATH" FM_FAKE_TMUX_WINDOW="$window" FM_FAKE_TMUX_CAPTURE="$dir/pane" \
+    FM_FAKE_TMUX_CURRENT_COMMAND=rovodev FM_FAKE_CREW_STATE='state: unknown · source: pane · harness state unavailable' \
+    watch_bg "$state" "$fakebin" "$dir/out" env
+  pid=$!
+  wait_for_exit "$pid" 100 || { reap "$pid"; fail "unknown probe under a landing wait silenced stale supervision"; }
+  grep -Fx "stale: $window" "$dir/out" >/dev/null || fail "expected plain stale wake for unknown probe: $(cat "$dir/out")"
+  pass "a landing wait quiets only a confirmed idle or gone endpoint; an unknown probe keeps stale supervision"
+}
+
 # A committed, unlanded ship with a stopped agent still alarms every time its
 # idle terminal display changes. No real runtime or model is launched here.
 test_finished_ship_stale_reproduction() {
@@ -6950,6 +6983,7 @@ test_landing_wait_record
 test_landing_wait_clear_and_busy_resume
 test_landing_wait_daemon_and_current_state
 test_landing_wait_quiets_stopped_ship
+test_landing_wait_unknown_probe_keeps_stale
 test_absorbed_replacement_wait_does_not_inherit_the_old_throttle
 test_live_declared_wait_churn_honors_the_resurface_throttle
 test_live_paused_until_controls_recheck_time

@@ -438,6 +438,12 @@ hash_pane() {
 # busy fallbacks and the launch-prompt backstop that keeps a launch pinned at
 # its fm-spawn seed from reading as provably working.
 window_is_busy() {  # <window> <tail40>
+  [ "$(window_busy_class "$1" "$2")" = busy ]
+}
+
+# window_busy_class: the first token of the same classification (busy, idle,
+# unknown), for callers that must tell a positive idle from an unknown.
+window_busy_class() {  # <window> <tail40>
   local w=$1 tail40=$2 task meta verdict
   task=$(window_to_task "$w" "$STATE")
   meta="$STATE/$task.meta"
@@ -447,7 +453,17 @@ window_is_busy() {  # <window> <tail40>
     verdict=$(fm_busy_classify "$(window_backend "$w")" "$w" "$(window_harness "$w")" \
       "${task:-unknown}" "$STATE" "$tail40")
   fi
-  [ "${verdict%% *}" = busy ]
+  printf '%s' "${verdict%% *}"
+}
+
+# landing_endpoint_gone: 0 only on the backend's positive death evidence (the
+# endpoint is absent or its pane holds no agent). Unreadable or unverified is
+# not confirmation.
+landing_endpoint_gone() {  # <window>
+  case "$(fm_backend_agent_state "$(window_backend "$1")" "$1" 2>/dev/null)" in
+    dead|missing) return 0 ;;
+  esac
+  return 1
 }
 
 window_kind() {
@@ -3006,11 +3022,15 @@ EOF
     # harness renders its busy indicator) so busy-looking strings in displayed
     # content cannot suppress stale detection. Read once per window per poll and
     # reused below so a busy verdict is consistent within one cycle.
-    if window_is_busy "$w" "$tail40"; then busy_now=0; else busy_now=1; fi
-    if [ "$busy_now" -ne 0 ] && fm_landing_wait_read "$STATE" "$task" >/dev/null; then
-      # The supervisor already owns this finished ship's external dependency.
-      # Inbox loss detection, actionable status scanning, and the check sweep
-      # ran above. Drop stale history so clearing the wait re-arms it.
+    busy_class=$(window_busy_class "$w" "$tail40")
+    if [ "$busy_class" = busy ]; then busy_now=0; else busy_now=1; fi
+    if [ "$busy_now" -ne 0 ] && fm_landing_wait_read "$STATE" "$task" >/dev/null \
+      && { [ "$busy_class" = idle ] || landing_endpoint_gone "$w"; }; then
+      # The supervisor already owns this finished ship's external dependency,
+      # and its endpoint is confirmed idle or gone; an unknown probe keeps the
+      # ordinary stale path. Inbox loss detection, actionable status scanning,
+      # and the check sweep ran above. Drop stale history so clearing the wait
+      # re-arms it.
       rm -f "$sf" "$ssf" "$ewf" "$cf"
       continue
     fi

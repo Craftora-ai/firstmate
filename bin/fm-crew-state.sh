@@ -148,8 +148,9 @@
 #      backend's pane busy state, then the resolved status declaration
 #      when its verb maps to a recognized run-state. Decision-only events such as
 #      `resolved` never become current state or detail. A status-log done, or
-#      an unknown idle or dead endpoint, reads as parked · landing-wait while a
-#      valid fm-landing-wait.sh record stands; run-step results never do.
+#      an unknown · none endpoint, reads as parked · landing-wait while a valid
+#      fm-landing-wait.sh record stands; run-step results and an unavailable
+#      harness-state probe (unknown · pane) never do.
 #   5. Missing meta or torn-down worktree: report unknown · none. If no run is
 #      attributed to this crew and no supervisor-owned landing wait explains its
 #      quiet, a dead endpoint also reports unknown · none rather
@@ -210,10 +211,10 @@ SEP=' · '
 emit() {  # <state> <source> [detail]
   local line="state: $1${SEP}source: $2" landing
   # Run-step results stay authoritative (a merged run is landed, not waiting). A
-  # supervisor's landing wait can explain a status-log done or an otherwise
-  # unknown idle/dead endpoint only.
+  # supervisor's landing wait can explain a status-log done or a gone endpoint
+  # only; an unavailable harness-state probe stays unknown.
   case "$1:$2" in
-    done:status-log|unknown:none|unknown:pane)
+    done:status-log|unknown:none)
       if [ -f "$STATE/$ID.landing-wait" ] \
         && cmp -s "$META" "$STATE/$ID.meta" && cmp -s "$LOG" "$STATE/$ID.status" \
         && landing=$(fm_landing_wait_read "$STATE" "$ID"); then

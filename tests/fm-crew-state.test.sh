@@ -2542,6 +2542,26 @@ test_no_run_footer_text_alone_is_not_working() {
   pass "a converted adapter never reads working from rendered footer text"
 }
 
+# A landing wait explains a status-log done or a gone endpoint, never a probe
+# that could not establish the harness state: that must still read unknown.
+test_no_run_unknown_probe_is_not_relabeled_by_landing_wait() {
+  reset_fakes
+  local d; d=$(new_case unknown-probe-landing-wait)
+  make_repo_on_branch "$d/wt" fm/feat-lu
+  make_fakebin "$d" >/dev/null
+  fm_write_meta "$d/state/feat-lu.meta" "window=fm:fm-feat-lu" "worktree=$d/wt" "kind=ship" "harness=claude" "branch=fm/feat-lu"
+  FM_FAKE_AXI_STATUS=""
+  FM_FAKE_RUNS_LIST=""
+  printf 'done: committed, waiting for landing\n' > "$d/state/feat-lu.status"
+  FM_STATE_OVERRIDE="$d/state" "$ROOT/bin/fm-landing-wait.sh" set feat-lu --reason 'merge approval' >/dev/null \
+    || fail "could not set landing wait"
+  local out; out=$(run_crew_state "$d" feat-lu)
+  assert_contains "$out" "state: unknown" "unavailable probe under a landing wait -> unknown"
+  assert_contains "$out" "source: pane" "unavailable probe keeps its pane source"
+  assert_not_contains "$out" "awaiting landing" "a probe failure must not read as awaiting landing"
+  pass "an unavailable harness-state probe is not relabeled by a landing wait"
+}
+
 # Grok keeps its isolated temporary rendered-tail fallback until its structured
 # lifecycle is live-verified, so a grok crew still reads working from its own
 # verified signature.
@@ -5602,6 +5622,7 @@ test_moved_remote_branch_without_named_head_is_blocked
 test_no_run_busy_pane
 test_no_run_launch_prompt_parked_is_not_working
 test_no_run_footer_text_alone_is_not_working
+test_no_run_unknown_probe_is_not_relabeled_by_landing_wait
 test_no_run_grok_uses_isolated_fallback
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
