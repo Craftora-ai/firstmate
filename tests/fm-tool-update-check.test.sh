@@ -1376,6 +1376,36 @@ SH
   pass "a second source confirming an already reported update is not news"
 }
 
+test_a_source_that_keeps_failing_does_not_hide_the_next_update() {
+  local home dir out
+  # A blocked announcement that never answers must not keep an installed update
+  # recorded forever, or the next release the published source finds is not news.
+  home=$(make_home failing-source)
+  dir="$home/bin"
+  make_release_transport "$dir"
+  cat > "$dir/no-mistakes-fixture" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'no-mistakes version %s\n' "$FM_INSTALLED"
+  exit 0
+fi
+printf 'error: dial tcp: connection refused\n' >&2
+exit 1
+SH
+  chmod 0755 "$dir/no-mistakes-fixture"
+  write_config "$home" '{"tools":[{"name":"no-mistakes","command":"no-mistakes-fixture","version_args":["--version"],"announce_args":["update","--check"],"announce_pattern":"A new version of no-mistakes is available: [^ ]+ -> [^ ]+","published":{"source":"github","repo":"kunchenguid/no-mistakes"}}]}'
+  out="$home/out.txt"
+  printf '%s\n' '{"tag_name":"v1.79.0"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_INSTALLED=v1.75.2 FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "no-mistakes update available: installed 1.75.2, published 1.79.0" "the published release did not report the pending update"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_INSTALLED=v1.79.0 FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  [ ! -s "$out" ] || fail "an installed update with a still failing announcement reported: $(cat "$out")"
+  printf '%s\n' '{"tag_name":"v1.80.0"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_INSTALLED=v1.79.0 FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "tool updates: no-mistakes update available: installed 1.79.0, published 1.80.0" "the next release was hidden behind a source that keeps failing"
+  pass "a source that keeps failing does not hide the tool's next update"
+}
+
 # --- registry and reporting contract ----------------------------------------
 
 test_absent_registry_is_silent() {
@@ -1813,6 +1843,7 @@ test_a_tool_probe_secs_gives_a_slow_tool_its_own_bound
 test_npm_packages_outside_path_are_compared_with_the_registry
 test_an_announcement_command_that_fails_is_a_check_failure
 test_a_second_source_confirming_a_reported_update_is_not_news
+test_a_source_that_keeps_failing_does_not_hide_the_next_update
 test_absent_registry_is_silent
 test_malformed_registry_is_reported_not_ignored
 test_findings_are_reported_once_until_their_condition_changes

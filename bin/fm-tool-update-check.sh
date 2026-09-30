@@ -89,9 +89,10 @@
 #   - A source that reached no answer this sweep (a probe that timed out, a
 #     remote that could not be read, a worker the deadline cut off) keeps what
 #     was recorded for it, so a transient failure never clears the memory of an
-#     update already reported. A recorded update is dropped only once every
-#     source of the tool that can report one (announce, published, git) answered
-#     and none reported it.
+#     update already reported. A recorded update is kept only while no source
+#     of the tool that can report one (announce, published, git) answered; once
+#     any of them answered and none reported it, it is dropped, so a source that
+#     keeps failing never hides the tool's next update.
 #   - A check failure and an unfinished sweep describe that probe or that sweep,
 #     not the tool, so they are remembered apart from updates and are only news
 #     again once absent for FAILURE_QUIET_SECS. A source that flips between
@@ -1051,16 +1052,19 @@ source_answered() {
   ! current_has "$1/failed"
 }
 
-# True when a source of <tool> that can report an available update is configured
-# and reached no answer this sweep.
-update_source_unanswered() {
-  local source
+# True when <tool> has a configured source that can report an available update
+# and none of those sources reached an answer this sweep.
+update_sources_unanswered() {
+  local source configured=1
   for source in announce published git; do
     case "$CONFIGURED" in
-      *" $1/$source "*) source_answered "$1/$source" || return 0 ;;
+      *" $1/$source "*)
+        configured=0
+        ! source_answered "$1/$source" || return 1
+        ;;
     esac
   done
-  return 1
+  return "$configured"
 }
 
 # The next record: every key found now, plus each recorded key the rules in the
@@ -1091,7 +1095,7 @@ EOF
         continue
         ;;
       */available)
-        [ "$CARRY_ALL" -eq 1 ] || update_source_unanswered "${key%/available}" || continue
+        [ "$CARRY_ALL" -eq 1 ] || update_sources_unanswered "${key%/available}" || continue
         ;;
       *)
         if [ "$CARRY_ALL" -ne 1 ]; then
