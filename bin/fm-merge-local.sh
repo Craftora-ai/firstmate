@@ -15,6 +15,15 @@
 # merge, so a captain approval must be recorded as an `answer --release` before
 # this entrypoint is invoked. The lock ends when the fast-forward returns;
 # docs/captain-hold-lifecycle.md owns the accepted merge-to-cleanup residual.
+# A repository lock also serializes local landings across tasks and homes.
+# The base and ship commits are captured once; validation and the fast-forward
+# use those full object IDs, never a mutable ship ref. Ref/checkout changes
+# during validation refuse before the merge, and the resulting tip is verified.
+# For the home vault (FM_HOME/projects/vault, including aliases sharing its Git
+# common directory), fm-knowledge-landing.py enforces the knowledge check before
+# landing. Its header owns the checker/approval protocol. Other projects keep
+# their existing approval path. These locks coordinate this entrypoint, not
+# arbitrary external Git writers; pause other checkout writers before landing.
 # Usage: fm-merge-local.sh <task-id>
 set -eu
 
@@ -31,6 +40,11 @@ if [ "$#" -ne 1 ] || ! fm_pr_task_id_valid "$1"; then
   exit 2
 fi
 ID=$1
+# Match the knowledge check's repository and object view, regardless of the
+# invoking harness's inherited Git checkout/index overrides or replace refs.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE
+export GIT_NO_REPLACE_OBJECTS=1
 fm_backlog_directory_present "$STATE" "state directory" || {
   echo "error: local merge refused: $FM_BACKLOG_TRANSITION_ERROR" >&2
   exit 1
@@ -59,7 +73,9 @@ fi
 MERGE_EXPECTED_SPAWN_GEN=$FM_BACKLOG_META_SPAWN_GEN
 
 MERGE_CONTROL_LOCK=
+MERGE_PROJECT_LOCK=
 merge_control_cleanup() {
+  [ -z "$MERGE_PROJECT_LOCK" ] || fm_lock_release "$MERGE_PROJECT_LOCK" || true
   [ -z "$MERGE_CONTROL_LOCK" ] || fm_lock_release "$MERGE_CONTROL_LOCK" || true
 }
 trap merge_control_cleanup EXIT
@@ -77,6 +93,18 @@ fi
 PROJ=$(grep '^project=' "$META" | cut -d= -f2-)
 MODE=$(grep '^mode=' "$META" | cut -d= -f2- || true)
 [ "$MODE" = local-only ] || { echo "error: task $ID is mode=$MODE, not local-only; merge PR tasks with bin/fm-pr-merge.sh <id> <PR url> after approval" >&2; exit 1; }
+
+common_directory() {
+  local common
+  common=$(git -C "$1" rev-parse --git-common-dir) || return 1
+  (cd "$1" && cd "$common" && pwd -P)
+}
+PROJECT_COMMON=$(common_directory "$PROJ") || exit 1
+MERGE_PROJECT_LOCK="$PROJECT_COMMON/fm-merge-local.lock"
+if ! fm_lock_acquire_wait_max "$MERGE_PROJECT_LOCK" 30; then
+  echo "error: another local landing holds $PROJECT_COMMON; retry when it finishes" >&2
+  exit 1
+fi
 
 default_branch() {
   local ref branch
@@ -100,27 +128,36 @@ if ! git check-ref-format --branch "$BRANCH" >/dev/null 2>&1; then
   echo "error: task $ID has an invalid recorded ship branch '$BRANCH'" >&2
   exit 1
 fi
-git -C "$PROJ" rev-parse --verify --quiet "refs/heads/$BRANCH" >/dev/null || { echo "error: branch $BRANCH does not exist in $PROJ" >&2; exit 1; }
+head=$(git -C "$PROJ" rev-parse --verify "refs/heads/$BRANCH^{commit}") || { echo "error: branch $BRANCH does not exist in $PROJ" >&2; exit 1; }
 
 DEFAULT=$(default_branch) || { echo "error: cannot determine default branch for $PROJ; expected origin/HEAD, main, or master" >&2; exit 1; }
+base=$(git -C "$PROJ" rev-parse --verify "refs/heads/$DEFAULT^{commit}")
 
 # The project's main checkout must be on its default branch and clean, so the
 # fast-forward lands predictably (firstmate never writes here otherwise).
 cur=$(git -C "$PROJ" symbolic-ref --short HEAD 2>/dev/null || echo "")
 [ "$cur" = "$DEFAULT" ] || { echo "error: $PROJ is on '$cur', expected default branch '$DEFAULT'; cannot merge safely" >&2; exit 1; }
-if [ -n "$(git -C "$PROJ" status --porcelain 2>/dev/null | head -1)" ]; then
+worktree_status=$(git -C "$PROJ" status --porcelain) || exit 1
+if [ -n "$worktree_status" ]; then
   echo "error: $PROJ has a dirty working tree; refusing to merge into it" >&2
   exit 1
 fi
 
 # Clean fast-forward only: DEFAULT must be an ancestor of BRANCH.
-if ! git -C "$PROJ" merge-base --is-ancestor "$DEFAULT" "$BRANCH"; then
+if ! git -C "$PROJ" merge-base --is-ancestor "$base" "$head"; then
   echo "REFUSED: $BRANCH is not a fast-forward of $DEFAULT (it has diverged)." >&2
   echo "Have the crewmate rebase $BRANCH onto $DEFAULT, then retry." >&2
   exit 1
 fi
 
-before=$(git -C "$PROJ" rev-parse --short "$DEFAULT")
+if [ -d "$FM_HOME/projects/vault" ]; then
+  VAULT_COMMON=$(common_directory "$FM_HOME/projects/vault") || exit 1
+  if [ "$PROJECT_COMMON" = "$VAULT_COMMON" ]; then
+    python3 "$SCRIPT_DIR/fm-knowledge-landing.py" "$PROJ" "$base" "$head" \
+      "$FM_HOME/data/jev/knowledge-landing-approvals/$ID" || exit 1
+  fi
+fi
+
 hold_status=0
 FM_HOME="$FM_HOME" FM_STATE_OVERRIDE="$STATE" \
   "$SCRIPT_DIR/fm-captain-hold.sh" open "$ID" --distinguish-absent || hold_status=$?
@@ -135,12 +172,28 @@ case "$hold_status" in
     exit 1
     ;;
 esac
+# The check and any approval above describe exactly this pair. The immutable
+# merge operand also closes the ship-ref race after this final comparison.
+if [ "$(git -C "$PROJ" symbolic-ref --quiet HEAD)" != "refs/heads/$DEFAULT" ] \
+  || [ "$(git -C "$PROJ" rev-parse --verify "refs/heads/$DEFAULT^{commit}")" != "$base" ] \
+  || [ "$(git -C "$PROJ" rev-parse --verify "refs/heads/$BRANCH^{commit}")" != "$head" ]; then
+  echo "error: checkout or landing refs changed during validation; refusing to merge" >&2
+  exit 1
+fi
+worktree_status=$(git -C "$PROJ" status --porcelain) || exit 1
+[ -z "$worktree_status" ] || { echo "error: working tree changed during validation; refusing to merge" >&2; exit 1; }
 merge_status=0
-git -C "$PROJ" merge --ff-only "$BRANCH" >/dev/null || merge_status=$?
+git -C "$PROJ" merge --ff-only "$head" >/dev/null || merge_status=$?
+[ "$merge_status" -eq 0 ] || exit "$merge_status"
+after=$(git -C "$PROJ" rev-parse --verify "refs/heads/$DEFAULT^{commit}")
+if [ "$after" != "$head" ] || [ "$(git -C "$PROJ" symbolic-ref --quiet HEAD)" != "refs/heads/$DEFAULT" ]; then
+  echo "error: local landing did not leave the checked commit $head on $DEFAULT; inspect $PROJ before retrying" >&2
+  exit 1
+fi
+fm_lock_release "$MERGE_PROJECT_LOCK" || true
+MERGE_PROJECT_LOCK=
 fm_lock_release "$MERGE_CONTROL_LOCK" || true
 MERGE_CONTROL_LOCK=
-[ "$merge_status" -eq 0 ] || exit "$merge_status"
-after=$(git -C "$PROJ" rev-parse --short "$DEFAULT")
 # Opt-in fleet activity ledger (docs/fleet-ledger.md); off costs one file test.
 [ ! -e "${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/fleet-ledger" ] || FM_HOME=$FM_HOME FM_STATE_OVERRIDE=$STATE "$SCRIPT_DIR/fm-fleet-ledger.sh" merged "$ID" local || true
-echo "merged $BRANCH into local $DEFAULT ($before -> $after) in $PROJ"
+echo "merged $BRANCH into local $DEFAULT ($base -> $after) in $PROJ"
