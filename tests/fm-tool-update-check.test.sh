@@ -1000,6 +1000,9 @@ test_published_dedupe_and_composition() {
   printf '%s\n' '{"version":"0.8.3"}' > "$home/response"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   [ ! -s "$out" ] || fail "a published release confirming the announced update was news: $(cat "$out")"
+  # One update is listed by its first text, so the announcement goes quiet here
+  # for the published line to show which installed copy it was compared with.
+  make_copy "$dir" "$TOOL" 'herdr 0.8.0'
   rm -f "$home/state/.tool-updates"
   run_check "$home" "$path" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   assert_contains "$(cat "$out")" 'update available: installed 0.8.2, published 0.8.3' "published source did not compare the newest installed copy"
@@ -1404,6 +1407,120 @@ SH
   run_check "$home" "$(fixture_path "$dir")" "$out" FM_INSTALLED=v1.79.0 FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
   assert_contains "$(cat "$out")" "tool updates: no-mistakes update available: installed 1.79.0, published 1.80.0" "the next release was hidden behind a source that keeps failing"
   pass "a source that keeps failing does not hide the tool's next update"
+}
+
+test_a_failing_copy_is_not_the_newest_install() {
+  local home dir healthy broken out report
+  # A broken copy can print a higher number on its way to failing. It is still
+  # probed, but it is no evidence of what is installed, so the healthy copy's
+  # version is what the published release is compared with.
+  home=$(make_home failing-copy)
+  dir="$home/bin"
+  healthy="$home/healthy/bin"
+  broken="$home/broken/bin"
+  make_release_transport "$dir"
+  make_copy "$healthy" "$TOOL" 'herdr 0.8.0'
+  mkdir -p "$broken"
+  printf '#!/bin/sh\nprintf "herdr 0.9.0\\n"\nexit 1\n' > "$broken/$TOOL"
+  chmod 0755 "$broken/$TOOL"
+  write_release_config "$home" herdr github herdrdev/herdr
+  printf '%s\n' '{"tag_name":"v0.8.2"}' > "$home/response"
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$healthy:$broken:$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  report=$(cat "$out")
+  assert_contains "$report" "herdr update available: installed 0.8.0, published 0.8.2" "a failing copy's version hid the published update"
+  assert_not_contains "$report" "not in effect" "a failing copy was reported as an installed update"
+  assert_not_contains "$report" "was not compared with the published release" "a healthy copy's version was not compared"
+  pass "a copy whose version probe fails is never taken as the newest install"
+}
+
+test_a_commented_npx_pin_is_not_the_installed_version() {
+  local home dir mcp out
+  home=$(make_home npx-comment)
+  dir="$home/bin"
+  mcp="$home/mcp"
+  out="$home/out.txt"
+  make_release_transport "$dir"
+  mkdir -p "$mcp"
+  printf '#!/usr/bin/env bash\n  # was: exec npx -y dataforseo-mcp-server@3.2.0\nexec npx -y dataforseo-mcp-server@2.9.8\n' > "$mcp/launch.sh"
+  jq -n --arg launcher "$mcp/launch.sh" '{tools: [
+    {name: "dfs", published: {source: "npm", package: "dataforseo-mcp-server", installed: {npx_pin: $launcher}}}
+  ]}' > "$home/config/watched-tools.json"
+  printf '%s\n' '{"version":"3.2.0"}' > "$home/response"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "dfs update available: installed 2.9.8, published 3.2.0" "a commented-out pin was read as the installed version"
+  pass "a commented-out npx pin is not read as the installed version"
+}
+
+test_persistent_sweep_warnings_are_reported_once() {
+  local home dir out
+  home=$(make_home sweep-warnings)
+  out="$home/out.txt"
+  printf 'not json at all\n' > "$home/config/watched-tools.json"
+  run_check "$home" "$PATH" "$out"
+  assert_contains "$(cat "$out")" "watched tool registry:" "a malformed registry was not reported"
+  run_check "$home" "$PATH" "$out"
+  [ ! -s "$out" ] || fail "an unchanged malformed registry was reported again: $(cat "$out")"
+
+  rm -f "$home/state/.tool-updates"
+  dir="$home/bin"
+  make_copy "$dir" "$TOOL" 'herdr 0.8.2'
+  write_config "$home" "{\"tools\":[{\"name\":\"herdr\",\"command\":\"$TOOL\"}]}"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_BUDGET_SECS=60
+  assert_contains "$(cat "$out")" "sweep budget 60s cut to" "a cut budget was not reported"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_BUDGET_SECS=60
+  [ ! -s "$out" ] || fail "an unchanged budget cut was reported again: $(cat "$out")"
+  pass "a malformed registry and a cut budget are reported once, not on every sweep"
+}
+
+test_a_timed_out_announcement_is_a_failure_whatever_it_printed() {
+  local home dir out report
+  # An announcement command that prints a matching line and then hangs never
+  # answered, so its partial output is not an answer.
+  home=$(make_home announce-hang)
+  dir="$home/bin"
+  mkdir -p "$dir"
+  cat > "$dir/no-mistakes-fixture" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'no-mistakes version v1.46.0\n'
+  exit 0
+fi
+printf 'A new version of no-mistakes is available: v1.46.0 -> v1.47.0\n' >&2
+sleep 30
+SH
+  chmod 0755 "$dir/no-mistakes-fixture"
+  write_config "$home" '{"tools":[{"name":"no-mistakes","command":"no-mistakes-fixture","version_args":["--version"],"announce_args":["--help"],"announce_pattern":"A new version of no-mistakes is available: [^ ]+ -> [^ ]+"}]}'
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_TOOL_UPDATE_PROBE_SECS=1
+  report=$(cat "$out")
+  assert_contains "$report" "no-mistakes check failed: $dir/no-mistakes-fixture did not answer when asked for its update announcement" "a timed-out announcement was read as an answer"
+  assert_not_contains "$report" "update available" "partial output of a timed-out announcement was reported as an update"
+  pass "a timed-out announcement is a check failure even when it printed a match"
+}
+
+test_one_update_found_by_two_sources_is_listed_once() {
+  local home dir out count
+  home=$(make_home two-sources-once)
+  dir="$home/bin"
+  make_release_transport "$dir"
+  cat > "$dir/no-mistakes-fixture" <<'SH'
+#!/usr/bin/env bash
+if [ "${1:-}" = "--version" ]; then
+  printf 'no-mistakes version v1.75.2\n'
+  exit 0
+fi
+printf 'A new version of no-mistakes is available: v1.75.2 -> v1.79.0\n' >&2
+SH
+  chmod 0755 "$dir/no-mistakes-fixture"
+  write_config "$home" '{"tools":[{"name":"no-mistakes","command":"no-mistakes-fixture","version_args":["--version"],"announce_args":["update","--check"],"announce_pattern":"A new version of no-mistakes is available: [^ ]+ -> [^ ]+","published":{"source":"github","repo":"kunchenguid/no-mistakes"}}]}'
+  printf '%s\n' '{"tag_name":"v1.79.0"}' > "$home/response"
+  out="$home/out.txt"
+  run_check "$home" "$(fixture_path "$dir")" "$out" FM_RELEASE_RESPONSE="$home/response" FM_RELEASE_LOG="$home/http.log"
+  assert_contains "$(cat "$out")" "tool updates: no-mistakes update available: A new version of no-mistakes is available: v1.75.2 -> v1.79.0" "the update was not reported"
+  count=$(grep -o 'no-mistakes update available' "$out" | wc -l | tr -d ' ')
+  [ "$count" = 1 ] || fail "one update found by two sources was listed $count times: $(cat "$out")"
+  pass "one update found by two sources is listed once"
 }
 
 # --- registry and reporting contract ----------------------------------------
@@ -1844,6 +1961,11 @@ test_npm_packages_outside_path_are_compared_with_the_registry
 test_an_announcement_command_that_fails_is_a_check_failure
 test_a_second_source_confirming_a_reported_update_is_not_news
 test_a_source_that_keeps_failing_does_not_hide_the_next_update
+test_a_failing_copy_is_not_the_newest_install
+test_a_commented_npx_pin_is_not_the_installed_version
+test_persistent_sweep_warnings_are_reported_once
+test_a_timed_out_announcement_is_a_failure_whatever_it_printed
+test_one_update_found_by_two_sources_is_listed_once
 test_absent_registry_is_silent
 test_malformed_registry_is_reported_not_ignored
 test_findings_are_reported_once_until_their_condition_changes

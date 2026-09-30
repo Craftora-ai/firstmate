@@ -1364,6 +1364,7 @@ This section is the single owner of the canonical schema.
 - The announcement counts as `update available` only when the version it names is newer than the newest installed copy found; a version already installed is reported only as `update not in effect`, so one completed install does not report both in the same sweep. An announcement naming no readable version is reported as an available update as before.
 - A tool does not always announce a new release on the command that prints its version: `no-mistakes --version` prints only the version, while its other commands carry the announcement.
 - `announce_args` names the command to search for the announcement in that case, and it is asked only of the copy `PATH` resolves; without it the version probe's own output is searched.
+- An announcement command that times out is a check failure, even if it printed an announcement before it was stopped.
 - An announcement command that exits non-zero without printing an announcement is a check failure rather than "no update", because a tool that cannot reach its own update source (a blocked network, an expired login) announces nothing either.
 - A tool that swallows that failure and exits zero cannot be told apart from one with nothing to announce, so for such a tool a `published` source is the reliable probe.
 - An `announce_pattern` that is not a usable extended regular expression stops `arm`, and during a sweep it is reported as that one tool's own check failure so one broken pattern never stops the other watched tools from being checked.
@@ -1379,11 +1380,11 @@ A `published` object selects one public release source:
 
 `published` accepts only the fields shown for its source, and requires a package name or `owner/repo`, without a URL, query, or credentials.
 It compares that source with the newest installed copy found, and reports an update only when the published version is numerically newer; a published version already installed is reported only as `update not in effect`.
-For this comparison, the installed version is the first dotted number in the output of a version command that exits successfully, so `0.1.49`, `v0.8.2`, and `herdr 0.8.2` work; a version command that fails is reported as a check failure.
+For this comparison, the installed version is the first dotted number in the output of a version command that exits successfully, so `0.1.49`, `v0.8.2`, and `herdr 0.8.2` work; a copy whose version command fails is never taken as the newest installed copy, and when no copy's version command succeeds that is reported as a check failure.
 An npm package that never lands on `PATH`, such as an MCP server a launcher starts through `npx`, names its installed version with `published.installed` instead, which takes exactly one of two absolute paths:
 
 - `{"npm_dir":"/abs/folder"}` reads the `version` of the package installed in that folder's `node_modules`, which is what the folder really runs even when its `package.json` pins a range.
-- `{"npx_pin":"/abs/launcher.sh"}` reads the first `<package>@<version>` pin in that file, such as `npx -y dataforseo-mcp-server@2.9.8`; a longer package name that merely ends the same way is not read as this one.
+- `{"npx_pin":"/abs/launcher.sh"}` reads the first `<package>@<version>` pin in that file, such as `npx -y dataforseo-mcp-server@2.9.8`; a line whose first non-blank character is `#` is skipped, and a longer package name that merely ends the same way is not read as this one.
 
 `installed` is accepted only for an `npm` source, and an install that cannot be read, or a launcher that pins no numbered version (`@latest`), is a check failure.
 A launcher that always runs `@latest` with no local install has nothing to fall behind, so it needs no `published` probe at all.
@@ -1414,7 +1415,7 @@ Arm the check once per home with `bin/fm-tool-update-check.sh arm`.
 - A tool going from current to behind, or a tool joining the list, is news, and so is a condition that cleared and returned.
 - A source that reached no answer on a sweep (a timed-out probe, an unreachable remote, a tool the sweep had to stop waiting for) keeps what was recorded for it, so a transient failure never makes an already reported update news again; a recorded update is kept only while none of the tool's update sources (the announcement, the published release, the git remote) answered, and is forgotten once any of them answered and none reported it, so a source that keeps failing never hides the tool's next update.
 - A check failure and an unfinished sweep are remembered apart from updates and are news again only after a whole day without them, so a source that flips between answering and not is reported once rather than on every flip.
-- When anything is news, the report line lists the news first and then, after `already reported:`, whatever else still needs attention.
+- When anything is news, the report line lists the news first and then, after `already reported:`, whatever else still needs attention; an update two sources found in the same sweep is listed once.
 - Adding, removing, or changing a watched tool is an edit to this file and needs no code change or re-arming.
 - This file is not inherited by secondmate homes, so each home watches the tools it actually depends on.
 

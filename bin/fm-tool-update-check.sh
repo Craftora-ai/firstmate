@@ -37,10 +37,10 @@
 #
 # Published versions are read from the public npm registry or GitHub latest
 # release API with curl and jq. No vendor CLI update command is invoked. The
-# installed side of that comparison is the newest copy on PATH, or, for an npm
-# package that lives outside PATH (an MCP server launched from its own folder),
-# the version installed in a folder's node_modules or pinned as <package>@<version>
-# in a launcher file.
+# installed side of that comparison is the newest copy on PATH whose version
+# command succeeded, or, for an npm package that lives outside PATH (an MCP
+# server launched from its own folder), the version installed in a folder's
+# node_modules or pinned as <package>@<version> on an uncommented launcher line.
 #
 # What this script never does: it reports, and it repairs nothing. It does not
 # install, update, uninstall, reorder PATH, or touch any version manager's
@@ -102,7 +102,8 @@
 #
 # When anything is news, the one report line puts the news first and what was
 # already reported after it, so the reason for the wake survives the one-line
-# cut. A sweep the watcher kills writes no record and is retried.
+# cut, and a finding two sources reported in one sweep is listed once. A sweep
+# the watcher kills writes no record and is retried.
 set -u
 export LC_ALL=C
 # A watched git remote must never stop to ask for credentials; an unauthenticated
@@ -496,7 +497,7 @@ command_findings() {
   local name=$1 command_name=$2 args_joined=$3 announce=$4 announce_args=$5 published=$6
   local hit out version matched announce_out announce_status status matched_line announced_version
   local resolved_path='' resolved_version='' resolved_out='' resolved_status=0
-  local best_path='' best_version='' best_status=0 unreadable='' hits=''
+  local best_path='' best_version='' failed_path='' failed_status=0 unreadable='' hits=''
   COMMAND_VERSION=
 
   # This tool's announcement source is dead if its pattern cannot be used, which
@@ -532,10 +533,15 @@ command_findings() {
       [ -n "$unreadable" ] || unreadable=$hit
       continue
     fi
+    # A copy that failed still counts as the one PATH resolves, but its version
+    # is no evidence of what is installed, so it never becomes the newest copy.
+    if [ "$status" -ne 0 ]; then
+      [ -n "$failed_path" ] || { failed_path=$hit; failed_status=$status; }
+      continue
+    fi
     if [ -z "$best_version" ] || version_newer "$version" "$best_version"; then
       best_version=$version
       best_path=$hit
-      best_status=$status
     fi
   done <<EOF
 $hits
@@ -560,7 +566,11 @@ EOF
         announce_status=$?
       fi
     fi
-    if [ -n "$announce_status" ]; then
+    if [ -n "$announce_status" ] && fm_timed_out "$announce_status"; then
+      # A source that was asked and never answered is not a source that had
+      # nothing to say, whatever it printed before it was stopped.
+      finding announce failed "$name check failed: $resolved_path did not answer when asked for its update announcement"
+    elif [ -n "$announce_status" ]; then
       # Not a pipeline, so grep's own status is still readable here: a pattern
       # grep cannot use is a check failure, never read as nothing to announce.
       matched=$(grep -oE -- "$announce" <<< "$announce_out" 2>/dev/null)
@@ -577,10 +587,6 @@ EOF
           || version_newer "$announced_version" "$best_version"; then
           update_available "$name update available: $matched_line"
         fi
-      elif fm_timed_out "$announce_status"; then
-        # A source that was asked and never answered is not a source that had
-        # nothing to say.
-        finding announce failed "$name check failed: $resolved_path did not answer when asked for its update announcement"
       elif [ "$announce_status" -ne 0 ]; then
         # A command that fails while fetching its own update news (a blocked
         # network, an expired login) prints no announcement either, and that
@@ -599,10 +605,10 @@ EOF
     return 0
   fi
 
-  if [ "$best_status" -eq 0 ]; then
+  if [ -n "$best_version" ]; then
     COMMAND_VERSION=$best_version
   elif [ -n "$published" ]; then
-    finding published failed "$name check failed: $best_path exited $best_status, so its version was not compared with the published release"
+    finding published failed "$name check failed: $failed_path exited $failed_status, so its version was not compared with the published release"
   fi
 
   if [ -n "$best_version" ] && [ "$best_path" != "$resolved_path" ] \
@@ -631,11 +637,12 @@ npm_dir_version() {
 
 # The version a launcher file pins as <package>@<version>, as in `npx -y
 # pkg@1.2.3`. The package name must start the token, so a longer name that ends
-# the same way is never read as this one.
+# the same way is never read as this one, and a commented-out line is never read.
 npx_pin_version() {
   local file=$1 package=$2 pattern
   pattern=$(printf '%s' "$package" | sed 's/[.]/[.]/g')
-  fm_run_timed "$(probe_bound)" grep -oE -- "(^|[^A-Za-z0-9._/@-])${pattern}@v?[0-9]+(\.[0-9]+)+" "$file" 2>/dev/null \
+  fm_run_timed "$(probe_bound)" grep -vE -- '^[[:space:]]*#' "$file" 2>/dev/null \
+    | grep -oE -- "(^|[^A-Za-z0-9._/@-])${pattern}@v?[0-9]+(\.[0-9]+)+" \
     | head -n 1 | sed 's/.*@v\{0,1\}//'
 }
 
@@ -1119,7 +1126,7 @@ EOF
 # --- actions ----------------------------------------------------------------
 
 action_check() {
-  local line now key text news='' known='' seen
+  local line now key text news='' known='' seen reported=' '
 
   [ -f "$CONFIG" ] || return 0
 
@@ -1158,6 +1165,11 @@ action_check() {
   # that currently needs attention.
   while IFS='	' read -r key text; do
     [ -n "$key" ] || continue
+    # Two sources can find the same update; its first text speaks for both.
+    case "$reported" in
+      *" $key "*) continue ;;
+    esac
+    reported="$reported$key "
     case "$RECORD_KEYS" in
       *" $key "*) known="${known:+$known; }$text" ;;
       *) news="${news:+$news; }$text" ;;
