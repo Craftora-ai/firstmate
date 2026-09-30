@@ -148,9 +148,11 @@
 #      backend's pane busy state, then the resolved status declaration
 #      when its verb maps to a recognized run-state. Decision-only events such as
 #      `resolved` never become current state or detail. A status-log done, or
-#      an unknown · none endpoint, reads as parked · landing-wait while a valid
-#      fm-landing-wait.sh record stands; run-step results and an unavailable
-#      harness-state probe (unknown · pane) never do.
+#      an unknown, reads as parked · landing-wait while a valid
+#      fm-landing-wait.sh record stands and fm_busy_endpoint_idle_or_gone
+#      (bin/fm-busy-lib.sh, the watcher's quiet predicate too) confirms the
+#      endpoint idle or gone; run-step results, and an unavailable
+#      harness-state probe over a live agent, never do.
 #   5. Missing meta or torn-down worktree: report unknown · none. If no run is
 #      attributed to this crew and no supervisor-owned landing wait explains its
 #      quiet, a dead endpoint also reports unknown · none rather
@@ -211,13 +213,16 @@ SEP=' · '
 emit() {  # <state> <source> [detail]
   local line="state: $1${SEP}source: $2" landing
   # Run-step results stay authoritative (a merged run is landed, not waiting). A
-  # supervisor's landing wait can explain a status-log done or a gone endpoint
-  # only; an unavailable harness-state probe stays unknown.
+  # supervisor's landing wait explains any other done or unknown only while the
+  # endpoint is confirmed idle or gone - the same predicate the watcher quiets
+  # on; an unavailable harness-state probe over a live agent stays unknown.
   case "$1:$2" in
-    done:status-log|unknown:none)
+    done:status-log|unknown:none|unknown:pane)
       if [ -f "$STATE/$ID.landing-wait" ] \
         && cmp -s "$META" "$STATE/$ID.meta" && cmp -s "$LOG" "$STATE/$ID.status" \
-        && landing=$(fm_landing_wait_read "$STATE" "$ID"); then
+        && landing=$(fm_landing_wait_read "$STATE" "$ID") \
+        && { [ -n "${BUSY_VERDICT:-}" ] || BUSY_VERDICT=$(crew_busy_verdict "$BACKEND_TARGET"); } \
+        && fm_busy_endpoint_idle_or_gone "${BUSY_VERDICT%% *}" "$TASK_BACKEND" "$BACKEND_TARGET"; then
         line="state: parked${SEP}source: landing-wait${SEP}awaiting landing: $landing"
       fi
       ;;

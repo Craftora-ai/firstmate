@@ -1203,6 +1203,22 @@ fm_busy_classify_meta() {  # <meta-file> <id> <state-dir> [tail40]
   fm_busy_classify "$backend" "$target" "$harness" "$id" "$state" "$tail40"
 }
 
+# fm_busy_endpoint_idle_or_gone: 0 only on positive evidence that nothing is
+# working at the endpoint - the verdict is exactly idle, or the backend
+# confirms the endpoint absent or its pane holding only a shell. A busy verdict,
+# or an unknown one over an endpoint the backend cannot confirm gone, is 1.
+# Requires fm-backend.sh to be sourced for fm_backend_agent_state.
+fm_busy_endpoint_idle_or_gone() {  # <verdict-class> <backend> <target>
+  case "$1" in
+    idle) return 0 ;;
+    busy) return 1 ;;
+  esac
+  case "$(fm_backend_agent_state "$2" "$3" 2>/dev/null)" in
+    dead|missing) return 0 ;;
+  esac
+  return 1
+}
+
 # fm_busy_is_busy: boolean view for callers that only gate on provable
 # activity. 0 iff the classification verdict is exactly busy; idle, unknown,
 # and dead all return 1, so an unknown can never be silently promoted to

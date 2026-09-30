@@ -456,16 +456,6 @@ window_busy_class() {  # <window> <tail40>
   printf '%s' "${verdict%% *}"
 }
 
-# landing_endpoint_gone: 0 only on the backend's positive death evidence (the
-# endpoint is absent or its pane holds no agent). Unreadable or unverified is
-# not confirmation.
-landing_endpoint_gone() {  # <window>
-  case "$(fm_backend_agent_state "$(window_backend "$1")" "$1" 2>/dev/null)" in
-    dead|missing) return 0 ;;
-  esac
-  return 1
-}
-
 window_kind() {
   local w=$1 meta kind
   meta=$(fm_backend_meta_for_window "$w" "$STATE" 2>/dev/null || true)
@@ -3024,8 +3014,8 @@ EOF
     # reused below so a busy verdict is consistent within one cycle.
     busy_class=$(window_busy_class "$w" "$tail40")
     if [ "$busy_class" = busy ]; then busy_now=0; else busy_now=1; fi
-    if [ "$busy_now" -ne 0 ] && fm_landing_wait_read "$STATE" "$task" >/dev/null \
-      && { [ "$busy_class" = idle ] || landing_endpoint_gone "$w"; }; then
+    if fm_landing_wait_read "$STATE" "$task" >/dev/null \
+      && fm_busy_endpoint_idle_or_gone "$busy_class" "$(window_backend "$w")" "$w"; then
       # The supervisor already owns this finished ship's external dependency,
       # and its endpoint is confirmed idle or gone; an unknown probe keeps the
       # ordinary stale path. Inbox loss detection, actionable status scanning,

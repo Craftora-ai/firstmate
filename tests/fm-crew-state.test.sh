@@ -206,15 +206,22 @@ set -u
 # trimmed PATH) or errors non-definitively - so even the inventory fails, with
 # a message that is NOT one of the definitive no-session/no-server/no-socket
 # responses that fm_backend_tmux_agent_state owns as death.
+# FM_FAKE_TMUX_WINDOWS / FM_FAKE_TMUX_CURRENT_COMMAND: the inventory lists these
+# window names and the pane's foreground command is this one, so the agent
+# probe can read a live agent or a shell-only pane.
 [ "${FM_FAKE_TMUX_UNREADABLE:-0}" = 1 ] && { printf 'no current client\n' >&2; exit 1; }
 case "${1:-}" in
   list-windows)
-    # A successful but empty inventory: it omits the crew's window, so absence
-    # is proved by the answer rather than by an addressed call failing. Only
-    # reached once display-message has already failed.
-    ;;
+    # By default a successful but empty inventory: it omits the crew's window,
+    # so absence is proved by the answer rather than by an addressed call
+    # failing.
+    [ -z "${FM_FAKE_TMUX_WINDOWS:-}" ] || printf '%s\n' "$FM_FAKE_TMUX_WINDOWS" ;;
   display-message)
     [ "${FM_FAKE_TMUX_MISSING:-0}" = 1 ] && exit 1
+    case "$*" in
+      *pane_current_command*) [ -z "${FM_FAKE_TMUX_CURRENT_COMMAND:-}" ] \
+        || { printf '%s\n' "$FM_FAKE_TMUX_CURRENT_COMMAND"; exit 0; } ;;
+    esac
     printf '%%1\n' ;;
   capture-pane)
     [ "${FM_FAKE_TMUX_MISSING:-0}" = 1 ] && exit 1
@@ -2542,11 +2549,12 @@ test_no_run_footer_text_alone_is_not_working() {
   pass "a converted adapter never reads working from rendered footer text"
 }
 
-# A landing wait explains a status-log done or a gone endpoint, never a probe
-# that could not establish the harness state: that must still read unknown.
-test_no_run_unknown_probe_is_not_relabeled_by_landing_wait() {
+# A landing wait explains an unknown harness-state probe only once the backend
+# confirms the agent gone (fm_busy_endpoint_idle_or_gone, the watcher's quiet
+# predicate): a shell-only pane reads parked, a live agent stays unknown.
+test_no_run_unknown_probe_is_relabeled_only_when_agent_gone() {
   reset_fakes
-  local d; d=$(new_case unknown-probe-landing-wait)
+  local d out; d=$(new_case unknown-probe-landing-wait)
   make_repo_on_branch "$d/wt" fm/feat-lu
   make_fakebin "$d" >/dev/null
   fm_write_meta "$d/state/feat-lu.meta" "window=fm:fm-feat-lu" "worktree=$d/wt" "kind=ship" "harness=claude" "branch=fm/feat-lu"
@@ -2555,11 +2563,15 @@ test_no_run_unknown_probe_is_not_relabeled_by_landing_wait() {
   printf 'done: committed, waiting for landing\n' > "$d/state/feat-lu.status"
   FM_STATE_OVERRIDE="$d/state" "$ROOT/bin/fm-landing-wait.sh" set feat-lu --reason 'merge approval' >/dev/null \
     || fail "could not set landing wait"
-  local out; out=$(run_crew_state "$d" feat-lu)
-  assert_contains "$out" "state: unknown" "unavailable probe under a landing wait -> unknown"
+  out=$(FM_FAKE_TMUX_WINDOWS=fm-feat-lu FM_FAKE_TMUX_CURRENT_COMMAND=claude run_crew_state "$d" feat-lu)
+  assert_contains "$out" "state: unknown" "unavailable probe over a live agent -> unknown"
   assert_contains "$out" "source: pane" "unavailable probe keeps its pane source"
   assert_not_contains "$out" "awaiting landing" "a probe failure must not read as awaiting landing"
-  pass "an unavailable harness-state probe is not relabeled by a landing wait"
+  out=$(FM_FAKE_TMUX_WINDOWS=fm-feat-lu FM_FAKE_TMUX_CURRENT_COMMAND=zsh run_crew_state "$d" feat-lu)
+  assert_contains "$out" "state: parked" "shell-only pane under a landing wait -> parked"
+  assert_contains "$out" "source: landing-wait" "shell-only pane reads the landing wait"
+  assert_contains "$out" "awaiting landing: merge approval" "shell-only pane names the landing condition"
+  pass "a landing wait relabels an unknown probe only when the agent is confirmed gone"
 }
 
 # Grok keeps its isolated temporary rendered-tail fallback until its structured
@@ -5622,7 +5634,7 @@ test_moved_remote_branch_without_named_head_is_blocked
 test_no_run_busy_pane
 test_no_run_launch_prompt_parked_is_not_working
 test_no_run_footer_text_alone_is_not_working
-test_no_run_unknown_probe_is_not_relabeled_by_landing_wait
+test_no_run_unknown_probe_is_relabeled_only_when_agent_gone
 test_no_run_grok_uses_isolated_fallback
 test_no_run_herdr_unknown_uses_backend_capture
 test_no_run_herdr_cli_failure_reads_unreachable_not_gone
