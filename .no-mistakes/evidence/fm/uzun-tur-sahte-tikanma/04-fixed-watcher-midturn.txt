@@ -1,0 +1,13 @@
+10:12:27 epoch=1790752347
+turn age: 85s
+wedge bookkeeping files:
+       .wedge-escalations-firstmate_fm-lab44e8292d12ae-worker 
+watcher start 10:12:22 (/private/tmp/fmlab.vwh1pg/home/bin) epoch=1790752342 busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262
+check: rearm-resurface
+watcher exit rc=0 at 10:12:22 after 0s; busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262
+--- triage log tail
+[2026-09-30T10:05:47+0300] absorbed stale (paused, awaiting external, age 403s): firstmate:fm-lab44e8292d12ae-worker
+[2026-09-30T10:06:03+0300] absorbed stale (paused, awaiting external, age 419s): firstmate:fm-lab44e8292d12ae-worker
+[2026-09-30T10:11:43+0300] absorbed benign signal: /private/tmp/fmlab.vwh1pg/home/state/lab44e8292d12ae-worker.status /private/tmp/fmlab.vwh1pg/home/state/lab44e8292d12ae-worker.turn-ended
+[2026-09-30T10:11:43+0300] absorbed busy (no completed turn) timer reset: firstmate:fm-lab44e8292d12ae-worker
+[2026-09-30T10:11:43+0300] absorbed heartbeat (no captain-relevant change)

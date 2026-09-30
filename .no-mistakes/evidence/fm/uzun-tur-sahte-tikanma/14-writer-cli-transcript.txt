@@ -1,0 +1,8 @@
+# real fm-busy-event.sh writer, throwaway state dir
+opencode session-busy:   v1 gen=g1790752622.88100.32734 seq=2 state=busy source=opencode-plugin event=session-busy ts=1790752622
+opencode session-retry: v1 gen=g1790752622.88100.32734 seq=3 state=busy source=opencode-plugin event=session-retry ts=1790752622   (ts kept)
+opencode session-idle:  v1 gen=g1790752622.88100.32734 seq=4 state=idle source=opencode-plugin event=session-idle ts=1790752625   (new ts)
+claude user-prompt-submit: v1 gen=g1790752625.88256.15685 seq=2 state=busy source=claude-hook event=user-prompt-submit ts=1790752625
+claude user-prompt-submit after interrupt (busy->busy): v1 gen=g1790752625.88256.15685 seq=3 state=busy source=claude-hook event=user-prompt-submit ts=1790752627   (new ts)
+error: stale busy-state gen for cl (event rejected)
+stale gen apply rc=1 record unchanged: v1 gen=g1790752625.88256.15685 seq=3 state=busy source=claude-hook event=user-prompt-submit ts=1790752627

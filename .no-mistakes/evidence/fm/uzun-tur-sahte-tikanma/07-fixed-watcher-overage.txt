@@ -1,0 +1,3 @@
+watcher start 10:13:25 (/private/tmp/fmlab.vwh1pg/home/bin) epoch=1790752405 busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262
+stale: firstmate:fm-lab44e8292d12ae-worker (idle 32s, possible wedge, escalation 2)
+watcher exit rc=0 at 10:13:57 after 32s; busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262

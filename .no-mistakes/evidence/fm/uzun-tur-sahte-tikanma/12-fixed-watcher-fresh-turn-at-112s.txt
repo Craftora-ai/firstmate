@@ -1,0 +1,10 @@
+10:16:06 epoch=1790752566
+fresh turn age: 113s; previous turn-ended age: 535s (bound 120s + stale escalate 30s)
+wedge bookkeeping files now:
+(none: wedge timer and escalation count cleared)
+--- fixed watcher output so far (still running = no wake)
+watcher start 10:14:23 (/private/tmp/fmlab.vwh1pg/home/bin) epoch=1790752463 busy-state: v1 gen=g1790751525.66386.29976 seq=8 state=busy source=claude-hook event=user-prompt-submit ts=1790752453
+--- triage log tail
+[2026-09-30T10:11:43+0300] absorbed busy (no completed turn) timer reset: firstmate:fm-lab44e8292d12ae-worker
+[2026-09-30T10:11:43+0300] absorbed heartbeat (no captain-relevant change)
+[2026-09-30T10:13:25+0300] absorbed busy (no completed turn) timer reset: firstmate:fm-lab44e8292d12ae-worker

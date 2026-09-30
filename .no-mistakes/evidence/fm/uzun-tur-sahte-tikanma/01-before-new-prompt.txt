@@ -1,0 +1,3 @@
+before new prompt 10:11:01 epoch=1790752261
+busy-state: v1 gen=g1790751525.66386.29976 seq=6 state=busy source=claude-hook event=user-prompt-submit ts=1790752049
+turn-ended mtime epoch: 1790752031

@@ -1,0 +1,3 @@
+watcher start 10:12:22 (/private/tmp/fmlab.vwh1pg/home/bin) epoch=1790752342 busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262
+check: rearm-resurface
+watcher exit rc=0 at 10:12:22 after 0s; busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262

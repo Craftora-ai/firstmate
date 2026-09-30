@@ -1,0 +1,3 @@
+after interrupt 10:14:07
+busy-state: v1 gen=g1790751525.66386.29976 seq=7 state=busy source=claude-hook event=user-prompt-submit ts=1790752262
+turn-ended mtime epoch: 1790752031 (age 416s)
