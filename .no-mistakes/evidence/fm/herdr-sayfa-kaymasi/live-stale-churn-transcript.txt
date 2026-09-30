@@ -1,0 +1,64 @@
+=== A. FIX, open needs-decision (the 2026-09-30 idle-scout shape)
+  repaint 1: watcher exited -> main woken (turn 1): stale: crew:fm-scout1
+[FIX open-question] pane repaints=5  main turns forced=1  stale wakes queued=0
+  crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+  triage log:
+   1     [2026-09-30T11:06:46+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:06:40+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:06:32+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:06:26+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+rm: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.DXUt7x/state: Directory not empty
+rm: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.DXUt7x: Directory not empty
+
+=== B. BASE eb77f02, same fixture
+  repaint 1: watcher exited -> main woken (turn 1): stale: crew:fm-scout1
+  repaint 2: watcher exited -> main woken (turn 2): stale: crew:fm-scout1
+  repaint 3: watcher exited -> main woken (turn 3): stale: crew:fm-scout1
+  repaint 4: watcher exited -> main woken (turn 4): stale: crew:fm-scout1
+  repaint 5: watcher exited -> main woken (turn 5): stale: crew:fm-scout1
+[BASE open-question] pane repaints=5  main turns forced=5  stale wakes queued=0
+  crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+  triage log:
+rm: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.zGyVDT/state: Directory not empty
+rm: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.zGyVDT: Directory not empty
+
+=== C. FIX, question answered then done (must keep alarming)
+  repaint 1: watcher exited -> main woken (turn 1): stale: crew:fm-scout1
+  repaint 2: watcher exited -> main woken (turn 2): stale: crew:fm-scout1
+  repaint 3: watcher exited -> main woken (turn 3): stale: crew:fm-scout1
+  repaint 4: watcher exited -> main woken (turn 4): stale: crew:fm-scout1
+[FIX answered] pane repaints=4  main turns forced=4  stale wakes queued=0
+  crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+  triage log:
+
+=== D. FIX, plain unheld blocked (no question, must keep alarming)
+  repaint 1: watcher exited -> main woken (turn 1): stale: crew:fm-scout1
+  repaint 2: watcher exited -> main woken (turn 2): stale: crew:fm-scout1
+  repaint 3: watcher exited -> main woken (turn 3): stale: crew:fm-scout1
+  repaint 4: watcher exited -> main woken (turn 4): stale: crew:fm-scout1
+[FIX blocked] pane repaints=4  main turns forced=4  stale wakes queued=0
+  crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+  triage log:
+
+=== E. FIX, open question, new status event at repaint 3 (must alarm at its first sight)
+  repaint 1: watcher exited -> main woken (turn 1): stale: crew:fm-scout1
+  (repaint 3: scout appends: blocked: cannot reach the board host)
+  repaint 3: watcher exited -> main woken (turn 2): signal: /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-lab.2w1smo/state/scout1.status
+  repaint 4: watcher exited -> main woken (turn 3): stale: crew:fm-scout1
+[FIX new-event] pane repaints=5  main turns forced=3  stale wakes queued=0
+  crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+  triage log:
+   1     [2026-09-30T11:09:07+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:08:51+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+
+=== F. FIX, open question, FM_PAUSE_RESURFACE_SECS=15 (must re-alarm once the window ends)
+  repaint 1: watcher exited -> main woken (turn 1): stale: crew:fm-scout1
+  repaint 4: watcher exited -> main woken (turn 2): stale: crew:fm-scout1
+  repaint 7: watcher exited -> main woken (turn 3): stale: crew:fm-scout1
+[FIX resurface-15s] pane repaints=7  main turns forced=3  stale wakes queued=0
+  crew-state: state: unknown · source: pane · harness state unavailable (unknown missing)
+  triage log:
+   1     [2026-09-30T11:09:52+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:09:46+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:09:31+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
+   1     [2026-09-30T11:09:24+0300] absorbed stale (unanswered needs-decision already surfaced for this status): crew:fm-scout1
