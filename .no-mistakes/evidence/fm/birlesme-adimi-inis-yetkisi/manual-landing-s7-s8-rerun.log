@@ -1,0 +1,26 @@
+worktree head: 5fe9d2db9750a21dd595a16c4bca41274efd85b3
+
+=== S7 mismatched FM_HOME, no FM_CONFIG_OVERRIDE, owning home opted in -> refused ===
+$ FM_HOME=elsewhere FM_STATE_OVERRIDE=s7/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | error: local merge refused: knowledge landing requires explicit approval of 274984c39ef5283d7647205063198b710af39502 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-knowledge-manual.W8Gvd7/s7/home/data/approvals/demo-task
+  | demo-check: base 958c27cd305f3a1474d658dd274db8bbe6799461 head 274984c39ef5283d7647205063198b710af39502 merge-base 958c27cd305f3a1474d658dd274db8bbe6799461
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  exit=1  main=958c27cd305f base=958c27cd305f head=274984c39ef5
+
+=== S8 mismatched FM_HOME, exact approval in owning home -> lands ===
+$ FM_HOME=elsewhere FM_STATE_OVERRIDE=s7/home/state fm-merge-local.sh demo-task
+  | WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+  | demo-check: base 958c27cd305f3a1474d658dd274db8bbe6799461 head 274984c39ef5283d7647205063198b710af39502 merge-base 958c27cd305f3a1474d658dd274db8bbe6799461
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  | knowledge landing: explicit approval matches 274984c39ef5283d7647205063198b710af39502
+  | merged fix/demo-task into local main (958c27cd305f3a1474d658dd274db8bbe6799461 -> 274984c39ef5283d7647205063198b710af39502) in s7/home/projects/notes
+  exit=0  main=274984c39ef5 base=958c27cd305f head=274984c39ef5

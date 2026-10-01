@@ -1,0 +1,99 @@
+
+=== S1 default-off: home without config, project named vault carrying a checker, code change
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+merged fix/s1 into local main (aff36885af2a233cbfc32e3f94a0afe1fc5aec75 -> 4935a974b20a66277ea3148675e1f084c3225ae4) in /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-know-manual.wrOqna/home/projects/vault
+exit=0
+main now: 4935a974b20a66277ea3148675e1f084c3225ae4  (base aff36885af2a233cbfc32e3f94a0afe1fc5aec75, head 4935a974b20a66277ea3148675e1f084c3225ae4)
+
+=== S2 opted-in, notes-only change: lands exact checked OID
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+qa-check: base 0b6f8e373655c24f4b7ffe07ef6bdc145b8481f1 head be230c6d3b8aa197d597d21745373c0861c02377 merge-base 0b6f8e373655c24f4b7ffe07ef6bdc145b8481f1; 1 change(s)
+OK notes only: 1 change(s)
+merged fix/s2 into local main (0b6f8e373655c24f4b7ffe07ef6bdc145b8481f1 -> be230c6d3b8aa197d597d21745373c0861c02377) in /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-know-manual.wrOqna/home/projects/notes
+exit=0
+main now: be230c6d3b8aa197d597d21745373c0861c02377  (base 0b6f8e373655c24f4b7ffe07ef6bdc145b8481f1, head be230c6d3b8aa197d597d21745373c0861c02377)
+
+=== S3 opted-in, code change, no approval: refused, main unchanged
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: local merge refused: knowledge landing requires explicit approval of ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-know-manual.wrOqna/home/data/approvals/s3
+qa-check: base be230c6d3b8aa197d597d21745373c0861c02377 head ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 merge-base be230c6d3b8aa197d597d21745373c0861c02377; 1 change(s)
+FAIL code code.py: non-note change needs approval
+REFUSED 1 finding(s)
+exit=1
+main now: be230c6d3b8aa197d597d21745373c0861c02377  (base be230c6d3b8aa197d597d21745373c0861c02377, head ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3)
+
+=== S4 stale approval (names base, not head): still refused
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: local merge refused: knowledge landing requires explicit approval of ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-know-manual.wrOqna/home/data/approvals/s3
+qa-check: base be230c6d3b8aa197d597d21745373c0861c02377 head ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 merge-base be230c6d3b8aa197d597d21745373c0861c02377; 1 change(s)
+FAIL code code.py: non-note change needs approval
+REFUSED 1 finding(s)
+exit=1
+main now: be230c6d3b8aa197d597d21745373c0861c02377  (base be230c6d3b8aa197d597d21745373c0861c02377, head ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3)
+
+=== S5 exact-head approval: lands that head
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+qa-check: base be230c6d3b8aa197d597d21745373c0861c02377 head ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 merge-base be230c6d3b8aa197d597d21745373c0861c02377; 1 change(s)
+FAIL code code.py: non-note change needs approval
+REFUSED 1 finding(s)
+knowledge landing: explicit approval matches ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3
+merged fix/s3 into local main (be230c6d3b8aa197d597d21745373c0861c02377 -> ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3) in /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-know-manual.wrOqna/home/projects/notes
+exit=0
+main now: ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3  (base be230c6d3b8aa197d597d21745373c0861c02377, head ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3)
+
+=== S6 mismatched FM_HOME, no FM_CONFIG_OVERRIDE: owning home config still applies (refused)
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+error: local merge refused: knowledge landing requires explicit approval of ec0cac3655a1d0a0a20d7e4d687f9793591c878b in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-know-manual.wrOqna/home/data/approvals/s6
+qa-check: base ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 head ec0cac3655a1d0a0a20d7e4d687f9793591c878b merge-base ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3; 1 change(s)
+FAIL code evil.sh: non-note change needs approval
+REFUSED 1 finding(s)
+exit=1
+main now: ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3  (base ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3, head ec0cac3655a1d0a0a20d7e4d687f9793591c878b)
+
+=== S7 mismatched FM_HOME: owning home's exact approval is found
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+qa-check: base ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 head ec0cac3655a1d0a0a20d7e4d687f9793591c878b merge-base ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3; 1 change(s)
+FAIL code evil.sh: non-note change needs approval
+REFUSED 1 finding(s)
+knowledge landing: explicit approval matches ec0cac3655a1d0a0a20d7e4d687f9793591c878b
+merged fix/s6 into local main (ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3 -> ec0cac3655a1d0a0a20d7e4d687f9793591c878b) in /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-know-manual.wrOqna/home/projects/notes
+exit=0
+main now: ec0cac3655a1d0a0a20d7e4d687f9793591c878b  (base ecaeab6a877f9870090cba94d8f2a2aaa40ccfc3, head ec0cac3655a1d0a0a20d7e4d687f9793591c878b)
+
+=== S8 opted-in home, ordinary project without checker: unaffected
+WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+merged fix/s8 into local main (35f8f0edfaa660227308dc6653102f74ed7cdb69 -> ae8027b8bb030fa2f349c4301d887d542eda6fd7) in /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-know-manual.wrOqna/home/projects/ordinary
+exit=0
+main now: ae8027b8bb030fa2f349c4301d887d542eda6fd7  (base 35f8f0edfaa660227308dc6653102f74ed7cdb69, head ae8027b8bb030fa2f349c4301d887d542eda6fd7)
+
+=== S9 configured project directory is a plain non-Git folder: ordinary landing not broken
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+merged fix/s9 into local main (23e1324fef2c86dd79b16b0832822d89a863f08d -> 858daa2d1ba69f4acf6b2728b22798555b91a4f1) in /var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T//fm-know-manual.wrOqna/home2/projects/other
+exit=0
+main now: 858daa2d1ba69f4acf6b2728b22798555b91a4f1  (base 23e1324fef2c86dd79b16b0832822d89a863f08d, head 858daa2d1ba69f4acf6b2728b22798555b91a4f1)
+
+=== S10 configured project whose checker was removed from base: refused (missing checker)
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+●  WATCHER DOWN - SUPERVISION IS OFF
+●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+●  This is a supervision warning only; the guarded operation WILL still run.
+●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+error: local merge refused: knowledge checker is missing or is not a regular file
+exit=1
+main now: 25e5eadcd25c1120ae3887e72736d5d818a3ea96  (base 25e5eadcd25c1120ae3887e72736d5d818a3ea96, head 211c2c2eb95ed4aca34f8c9bca4de031ce83e75c)
+
+lab removed: yes

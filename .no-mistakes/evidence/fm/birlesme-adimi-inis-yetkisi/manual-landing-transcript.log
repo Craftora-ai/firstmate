@@ -1,0 +1,139 @@
+worktree head: 5fe9d2db9750a21dd595a16c4bca41274efd85b3
+
+=== S1 opted-in home, checker refuses code commit, no approval -> refused, main unchanged ===
+$ FM_HOME=s1/home FM_STATE_OVERRIDE=s1/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | error: local merge refused: knowledge landing requires explicit approval of ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-knowledge-manual.aBbAwT/s1/home/data/approvals/demo-task
+  | demo-check: base 049d3f82ee6b990152a34de8942d982594598707 head ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8 merge-base 049d3f82ee6b990152a34de8942d982594598707
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  exit=1  main=049d3f82ee6b base=049d3f82ee6b head=ceb596b2ce86
+
+=== S2 same, stale approval (names base) -> refused ===
+$ FM_HOME=s1/home FM_STATE_OVERRIDE=s1/home/state fm-merge-local.sh demo-task
+  | WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+  | error: local merge refused: knowledge landing requires explicit approval of ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-knowledge-manual.aBbAwT/s1/home/data/approvals/demo-task
+  | demo-check: base 049d3f82ee6b990152a34de8942d982594598707 head ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8 merge-base 049d3f82ee6b990152a34de8942d982594598707
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  exit=1  main=049d3f82ee6b base=049d3f82ee6b head=ceb596b2ce86
+
+=== S3 same, exact-head approval on first line -> lands exactly head ===
+$ FM_HOME=s1/home FM_STATE_OVERRIDE=s1/home/state fm-merge-local.sh demo-task
+  | WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+  | demo-check: base 049d3f82ee6b990152a34de8942d982594598707 head ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8 merge-base 049d3f82ee6b990152a34de8942d982594598707
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  | knowledge landing: explicit approval matches ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8
+  | merged fix/demo-task into local main (049d3f82ee6b990152a34de8942d982594598707 -> ceb596b2ce862861d9fcda867e2a0ffa8bcf5de8) in s1/home/projects/notes
+  exit=0  main=ceb596b2ce86 base=049d3f82ee6b head=ceb596b2ce86
+
+=== S4 opted-in home, note-only commit passes checker -> lands exactly head ===
+$ FM_HOME=s4/home FM_STATE_OVERRIDE=s4/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | demo-check: base 72116d5d46b4ccaf84cf2b6ffdc668a34d6a0cc8 head 4f3d1d78c178b4e9065f8e70176809c873d361e0 merge-base 72116d5d46b4ccaf84cf2b6ffdc668a34d6a0cc8
+  | OK clean: 1 change(s)
+  | merged fix/demo-task into local main (72116d5d46b4ccaf84cf2b6ffdc668a34d6a0cc8 -> 4f3d1d78c178b4e9065f8e70176809c873d361e0) in s4/home/projects/notes
+  exit=0  main=4f3d1d78c178 base=72116d5d46b4 head=4f3d1d78c178
+
+=== S5 opted-in configured project (project=), checker missing in repo -> refused ===
+$ FM_HOME=s5/home FM_STATE_OVERRIDE=s5/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | error: local merge refused: knowledge checker is missing or is not a regular file
+  exit=1  main=7f7794f57645 base=7f7794f57645 head=0c0986160bc5
+
+=== S6 default-off home, ordinary project named vault with code commit -> lands as before ===
+$ FM_HOME=s6/home FM_STATE_OVERRIDE=s6/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | merged fix/demo-task into local main (0db55a42884ff2d3586c0ccadc30721665652d1c -> 12de0d0728cf529eac4772e7abb9ec9fc9d2c847) in s6/home/projects/vault
+  exit=0  main=12de0d0728cf base=0db55a42884f head=12de0d0728cf
+
+=== S7 mismatched FM_HOME, no FM_CONFIG_OVERRIDE, owning home opted in -> refused ===
+$ FM_HOME=elsewhere FM_STATE_OVERRIDE=s7/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | error: local merge refused: knowledge landing requires explicit approval of 4d16a14b2e7160887d99c7a3a1e58bb62b662bb0 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-knowledge-manual.aBbAwT/s7/home/data/approvals/demo-task
+  | demo-check: base d724ccfcc4d423a213db6d1866cac82e7401c7ed head 4d16a14b2e7160887d99c7a3a1e58bb62b662bb0 merge-base d724ccfcc4d423a213db6d1866cac82e7401c7ed
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  exit=1  main=d724ccfcc4d4 base=d724ccfcc4d4 head=4d16a14b2e71
+
+=== S8 mismatched FM_HOME, exact approval in owning home -> lands ===
+$ FM_HOME=elsewhere FM_STATE_OVERRIDE=s7/home/state fm-merge-local.sh demo-task
+  | WARNING: watcher still down (same stale episode; last beat: never, grace 300s) - full banner already printed this episode.
+  | demo-check: base d724ccfcc4d423a213db6d1866cac82e7401c7ed head 4d16a14b2e7160887d99c7a3a1e58bb62b662bb0 merge-base d724ccfcc4d423a213db6d1866cac82e7401c7ed
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  | knowledge landing: explicit approval matches 4d16a14b2e7160887d99c7a3a1e58bb62b662bb0
+  | fm-captain-hold: data directory cannot be resolved: elsewhere/data
+  | error: could not determine whether task demo-task is still held for the captain; refusing to merge
+  exit=1  main=d724ccfcc4d4 base=d724ccfcc4d4 head=4d16a14b2e71
+
+=== S9 opted-in home with non-Git project= dir, unrelated ordinary project -> lands ===
+$ FM_HOME=s9/home FM_STATE_OVERRIDE=s9/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | merged fix/demo-task into local main (17f2c53128c6ec646da94db646d2fcaa60b65653 -> de542a344d278242574f7ab14e2da64a4ff23467) in s9/home/projects/ordinary
+  exit=0  main=de542a344d27 base=17f2c53128c6 head=de542a344d27
+
+=== S10 malformed config (checker escapes repo) -> refused ===
+$ FM_HOME=s10/home FM_STATE_OVERRIDE=s10/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | error: local merge refused: /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-knowledge-manual.aBbAwT/s10/home/config/knowledge-landing needs one relative checker=, one approvals= and at least one ok=
+  exit=1  main=17f8f8cfc65f base=17f8f8cfc65f head=2a1e90f95d1b
+
+=== S11 PYTHONPATH sitecustomize injection cannot forge a pass ===
+  (PYTHONPATH=poison)
+$ FM_HOME=s11/home FM_STATE_OVERRIDE=s11/home/state fm-merge-local.sh demo-task
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | ●  WATCHER DOWN - SUPERVISION IS OFF
+  | ●  1 task(s) in flight, but no watcher has a fresh beacon (last beat: never, grace 300s).
+  | ●  Trust the emitted supervision protocol for this harness; do not use shell & for watcher repair.
+  | ●  This is a supervision warning only; the guarded operation WILL still run.
+  | ●  watcher supervision needs Stop-owned automatic recovery; inspect the hook registration and startup status before ending the turn.
+  | ●━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  | error: local merge refused: knowledge landing requires explicit approval of bfa13ac6a3870d03074ddcef6516154664b5e5f0 in /private/var/folders/tw/46_l9d8906zc06kfjnmjpwqc0000gn/T/fm-knowledge-manual.aBbAwT/s11/home/data/approvals/demo-task
+  | demo-check: base fc1608b19426ca704964c7bfab9eb76ab6361f36 head bfa13ac6a3870d03074ddcef6516154664b5e5f0 merge-base fc1608b19426ca704964c7bfab9eb76ab6361f36
+  | FAIL forbidden.py: code in knowledge repo
+  | REFUSED 1 finding(s)
+  exit=1  main=fc1608b19426 base=fc1608b19426 head=bfa13ac6a387

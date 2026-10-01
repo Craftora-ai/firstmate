@@ -1,0 +1,12 @@
+ok - cleanup preserves every byte of a retained body's non-ASCII characters
+ok - merge approval releases before zero-retention cleanup records completion
+ok - the PR merge entrypoint refuses a captain-held task before merging
+ok - the local merge entrypoint refuses a captain-held task before merging
+ok - the PR merge entrypoint separates an unreadable authority record from an absent one
+ok - the local merge entrypoint separates an unreadable authority record from an absent one
+ok - merge entrypoints reject unsafe identities and absent state before locking
+ok - merge entrypoints refuse a replacement incarnation after waiting for cleanup
+ok - merge entrypoints own task state before forced cleanup can retire it
+ok - a released merge passes the guarded entrypoint and remains recently landed
+bash tests/zz-selected-hold.nmtest.sh  71.20s user 73.95s system 37% cpu 6:29.03 total
+exit=0
