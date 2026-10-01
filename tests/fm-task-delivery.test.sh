@@ -576,9 +576,10 @@ PY
     > "$KNOW_HOME/state/$KNOW_ID.meta"
 }
 
-knowledge_merge() {  # <checker-case> [shell-form] [landing-home]
-  FM_HOME="${3:-$KNOW_HOME}" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$KNOW_HOME/state" \
-    FM_CONFIG_OVERRIDE="$KNOW_HOME/config" FM_KNOW_CASE="$1" \
+knowledge_merge() {  # <checker-case> [shell-form] [landing-home] [config-override]
+  env ${4:+"FM_CONFIG_OVERRIDE=$4"} \
+    FM_HOME="${3:-$KNOW_HOME}" FM_ROOT_OVERRIDE="$ROOT" FM_STATE_OVERRIDE="$KNOW_HOME/state" \
+    FM_KNOW_CASE="$1" \
     bash -c "${2:-\"\$1\" \"\$2\"}" _ "$MERGE_LOCAL" "$KNOW_ID" \
     > "$KNOW_HOME/out" 2>&1
 }
@@ -682,16 +683,27 @@ test_knowledge_landing_opt_in() {
 }
 
 test_knowledge_landing_home_mismatch() {
-  local elsewhere
-  knowledge_case home-mismatch
+  local elsewhere relocated override
   elsewhere="$TMP_ROOT/elsewhere"
-  mkdir -p "$elsewhere/data" "$elsewhere/state"
-  if knowledge_merge refused '' "$elsewhere"; then
-    fail "mismatched FM_HOME bypassed knowledge refusal"
-  fi
-  [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "mismatched home moved main"
-  assert_contains "$(cat "$KNOW_HOME/out")" "knowledge landing requires explicit approval" "mismatched home did not run the knowledge gate"
-  pass "fm-merge-local: the captured checker protects opted-in tasks despite a mismatched FM_HOME"
+  relocated="$TMP_ROOT/relocated-config"
+  mkdir -p "$elsewhere/data" "$elsewhere/state" "$relocated"
+  # The owning home's setting and approval records apply under another
+  # FM_HOME, whether its config is found beside the state or relocated.
+  for override in '' "$relocated"; do
+    knowledge_case "home-mismatch${override:+-override}"
+    [ -z "$override" ] || mv "$KNOW_HOME/config/knowledge-landing" "$override/knowledge-landing"
+    if knowledge_merge refused '' "$elsewhere" "$override"; then
+      fail "mismatched FM_HOME bypassed knowledge refusal (config override: ${override:-none})"
+    fi
+    [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "mismatched home moved main"
+    assert_contains "$(cat "$KNOW_HOME/out")" "explicit approval of $KNOW_HEAD in $KNOW_APPROVAL" \
+      "mismatched home did not require the owning home's approval"
+    printf '%s\n' "$KNOW_HEAD" > "$KNOW_APPROVAL"
+    knowledge_merge refused '' "$elsewhere" "$override" \
+      || fail "owning home's exact approval was not found under a mismatched FM_HOME: $(cat "$KNOW_HOME/out")"
+    [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_HEAD" ] || fail "approved mismatched-home landing missed the ship commit"
+  done
+  pass "fm-merge-local: the owning home's setting and approvals apply under a mismatched FM_HOME"
 }
 
 test_knowledge_landing_python_environment() {

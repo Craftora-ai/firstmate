@@ -2,7 +2,9 @@
 """Opt-in knowledge-check protocol for fm-merge-local.sh landings.
 
 Usage: python3 -I fm-knowledge-landing.py <config> <home> <project> <base-oid> <head-oid> <task-id>
-The caller runs this only when the home's config/knowledge-landing exists,
+<home> is the home that owns the task's state, whatever FM_HOME the landing
+runs under. The caller runs this only when its config/knowledge-landing (or
+FM_CONFIG_OVERRIDE's copy) exists,
 pins both commits, checks ancestry and cleanliness, and merges only head-oid
 after success. This helper never merges or grants merge authority.
 

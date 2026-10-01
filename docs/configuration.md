@@ -620,13 +620,14 @@ project=projects/notes
 ```
 
 `checker` is the checker's path inside the project repository, `approvals` is the directory of per-task approval records, each `ok` line is a final-line prefix the checker prints on a pass, and each optional `project` line names a repository that always needs the check.
-Relative `approvals` and `project` paths resolve against `FM_HOME`.
+Relative `approvals` and `project` paths resolve against the home that owns the task.
 The check covers a repository whose captured default-branch commit carries the checker, and any checkout sharing a Git common directory with a configured `project` that is its own work-tree top level; a non-Git or nested `project` directory covers nothing.
 A covered landing whose checker is missing, broken, or refuses without a matching approval is refused, and a malformed file refuses every local landing until it is fixed.
 
 ### Home scope
 
-The file is read from the effective home's config directory (`FM_CONFIG_OVERRIDE` when set), so a landing run under a different `FM_HOME` without the file does not apply the check.
+The file belongs to the home that owns the task's state, the parent of the state directory, so a landing run under a different `FM_HOME` or with `FM_STATE_OVERRIDE` still applies the owning home's setting.
+`FM_CONFIG_OVERRIDE`, when set, selects where the file is read; relative `approvals` and `project` paths still resolve against the owning home.
 `bin/fm-knowledge-landing.py`'s header owns the checker verdict and approval-record protocol.
 
 ## Gate defaults (.no-mistakes.yaml)

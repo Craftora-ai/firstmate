@@ -19,8 +19,9 @@
 # The base and ship commits are captured once; validation and the fast-forward
 # use those full object IDs, never a mutable ship ref. Ref/checkout changes
 # during validation refuse before the merge, and the resulting tip is verified.
-# A home opted in with config/knowledge-landing (docs/configuration.md) runs
-# fm-knowledge-landing.py before landing; its header owns which repositories
+# A task whose owning home (the parent of its state directory) is opted in
+# with config/knowledge-landing (docs/configuration.md), or FM_CONFIG_OVERRIDE's
+# copy of that file, runs fm-knowledge-landing.py before landing; its header owns which repositories
 # it applies to and the checker/approval protocol. Without that file, and for
 # repositories it does not cover, projects keep their existing approval path.
 # These locks coordinate this entrypoint, not arbitrary external Git writers;
@@ -151,9 +152,10 @@ if ! git -C "$PROJ" merge-base --is-ancestor "$base" "$head"; then
   exit 1
 fi
 
-KNOWLEDGE_CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/knowledge-landing"
+TASK_HOME=$(cd "$STATE/.." && pwd -P) || exit 1
+KNOWLEDGE_CONFIG="${FM_CONFIG_OVERRIDE:-$TASK_HOME/config}/knowledge-landing"
 if [ -e "$KNOWLEDGE_CONFIG" ] || [ -L "$KNOWLEDGE_CONFIG" ]; then
-  python3 -I "$SCRIPT_DIR/fm-knowledge-landing.py" "$KNOWLEDGE_CONFIG" "$FM_HOME" \
+  python3 -I "$SCRIPT_DIR/fm-knowledge-landing.py" "$KNOWLEDGE_CONFIG" "$TASK_HOME" \
     "$PROJ" "$base" "$head" "$ID" || exit 1
 fi
 
