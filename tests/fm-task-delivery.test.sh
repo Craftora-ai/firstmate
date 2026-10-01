@@ -735,6 +735,44 @@ PY
   pass "fm-merge-local: helper and checker ignore inherited Python startup customization"
 }
 
+test_knowledge_landing_inherited_git_config() {
+  local form
+  # Inherited command-line Git config must not change which checkout the
+  # landing inspects and updates, nor hide that checkout's state from it.
+  for form in count parameters; do
+    knowledge_case "git-config-$form"
+    mkdir -p "$KNOW_HOME/decoy"
+    git -C "$KNOW_PROJECT" archive main | tar -x -C "$KNOW_HOME/decoy" || fail "decoy checkout fixture failed"
+    if inherited_git_config "$form" core.worktree "$KNOW_HOME/decoy" knowledge_merge refused; then
+      fail "inherited $form config bypassed knowledge refusal"
+    fi
+    [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "inherited $form config moved main"
+    printf 'concurrent edit\n' > "$KNOW_PROJECT/untracked"
+    if inherited_git_config "$form" status.showUntrackedFiles no knowledge_merge pass; then
+      fail "inherited $form config hid a dirty checkout"
+    fi
+    assert_contains "$(cat "$KNOW_HOME/out")" "dirty working tree" "inherited $form config did not name the dirty checkout"
+    rm "$KNOW_PROJECT/untracked"
+    inherited_git_config "$form" core.worktree "$KNOW_HOME/decoy" knowledge_merge pass \
+      || fail "inherited $form config refused a valid landing: $(cat "$KNOW_HOME/out")"
+    [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_HEAD" ] || fail "inherited $form config missed the ship commit"
+    [ -f "$KNOW_PROJECT/note.md" ] && [ -z "$(git -C "$KNOW_PROJECT" status --porcelain)" ] \
+      || fail "inherited $form config left the task checkout stale"
+    [ ! -e "$KNOW_HOME/decoy/note.md" ] || fail "inherited $form config updated another checkout"
+  done
+  pass "fm-merge-local: inherited Git config cannot redirect or hide the landing checkout"
+}
+
+inherited_git_config() {  # <count|parameters> <key> <value> <command...>
+  local form=$1 key=$2 value=$3
+  shift 3
+  if [ "$form" = count ]; then
+    GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0=$key GIT_CONFIG_VALUE_0=$value "$@"
+  else
+    GIT_CONFIG_PARAMETERS="'$key'='$value'" "$@"
+  fi
+}
+
 test_knowledge_landing_ref_races() {
   local case fakebin real_git
   for case in race-ship race-base dirty; do
@@ -1907,6 +1945,7 @@ test_knowledge_landing_shell_forms_and_scope
 test_knowledge_landing_opt_in
 test_knowledge_landing_home_mismatch
 test_knowledge_landing_python_environment
+test_knowledge_landing_inherited_git_config
 test_knowledge_landing_ref_races
 test_project_mode_matches_whole_multiword_names
 test_project_mode_maps_the_conditional_policy

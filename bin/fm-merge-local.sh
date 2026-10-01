@@ -43,9 +43,11 @@ if [ "$#" -ne 1 ] || ! fm_pr_task_id_valid "$1"; then
 fi
 ID=$1
 # Match the knowledge check's repository and object view, regardless of the
-# invoking harness's inherited Git checkout/index overrides or replace refs.
+# invoking harness's inherited Git checkout/index/config overrides or replace refs.
+# Without GIT_CONFIG_COUNT, Git ignores any GIT_CONFIG_KEY_n/VALUE_n pairs.
 unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY \
-  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE
+  GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE \
+  GIT_CONFIG_COUNT GIT_CONFIG_PARAMETERS
 export GIT_NO_REPLACE_OBJECTS=1
 fm_backlog_directory_present "$STATE" "state directory" || {
   echo "error: local merge refused: $FM_BACKLOG_TRANSITION_ERROR" >&2
