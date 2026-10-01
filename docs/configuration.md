@@ -603,6 +603,32 @@ The flag is a home-local supervision-noise preference and is not inherited by se
 
 [`architecture.md`](architecture.md) owns the wait-evidence contract and which records may take the ladder away; `bin/fm-watch.sh`'s `wedge_wait_evidence` owns the exact derivation and its fail-closed boundaries.
 
+## Knowledge-landing check (config/knowledge-landing)
+
+The optional local, gitignored `config/knowledge-landing` file opts this home into a default-off repository check that `bin/fm-merge-local.sh` runs before every local-only landing it covers.
+Without the file, local landings behave exactly as before, whatever a project is named.
+
+### Settings
+
+The file holds one `key=value` per line; blank lines and `#` lines are ignored:
+
+```text
+checker=tools/check-landing.py
+approvals=data/landing-approvals
+ok=OK notes only:
+project=projects/notes
+```
+
+`checker` is the checker's path inside the project repository, `approvals` is the directory of per-task approval records, each `ok` line is a final-line prefix the checker prints on a pass, and each optional `project` line names a repository that always needs the check.
+Relative `approvals` and `project` paths resolve against `FM_HOME`.
+The check covers a repository whose captured default-branch commit carries the checker, and any checkout sharing a Git common directory with a configured `project` that is its own work-tree top level; a non-Git or nested `project` directory covers nothing.
+A covered landing whose checker is missing, broken, or refuses without a matching approval is refused, and a malformed file refuses every local landing until it is fixed.
+
+### Home scope
+
+The file is read from the effective home's config directory (`FM_CONFIG_OVERRIDE` when set), so a landing run under a different `FM_HOME` without the file does not apply the check.
+`bin/fm-knowledge-landing.py`'s header owns the checker verdict and approval-record protocol.
+
 ## Gate defaults (.no-mistakes.yaml)
 
 The tracked `.no-mistakes.yaml` sets `test.evidence.store_in_repo: true` and pins `commands.lint` to `bin/fm-lint.sh`, the same owner CI invokes.

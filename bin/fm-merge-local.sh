@@ -19,12 +19,12 @@
 # The base and ship commits are captured once; validation and the fast-forward
 # use those full object IDs, never a mutable ship ref. Ref/checkout changes
 # during validation refuse before the merge, and the resulting tip is verified.
-# For repositories carrying the knowledge checker in the captured base, and
-# the home vault (FM_HOME/projects/vault, including aliases sharing its Git
-# common directory), fm-knowledge-landing.py enforces the check before landing.
-# Its header owns the checker/approval protocol. Other projects keep
-# their existing approval path. These locks coordinate this entrypoint, not
-# arbitrary external Git writers; pause other checkout writers before landing.
+# A home opted in with config/knowledge-landing (docs/configuration.md) runs
+# fm-knowledge-landing.py before landing; its header owns which repositories
+# it applies to and the checker/approval protocol. Without that file, and for
+# repositories it does not cover, projects keep their existing approval path.
+# These locks coordinate this entrypoint, not arbitrary external Git writers;
+# pause other checkout writers before landing.
 # Usage: fm-merge-local.sh <task-id>
 set -eu
 
@@ -151,16 +151,10 @@ if ! git -C "$PROJ" merge-base --is-ancestor "$base" "$head"; then
   exit 1
 fi
 
-knowledge_landing=no
-if git -C "$PROJ" cat-file -e "$base:06 AI Team/AI Team Knowledge/Scripts/check-knowledge-landing.py" 2>/dev/null; then
-  knowledge_landing=yes
-elif [ -d "$FM_HOME/projects/vault" ]; then
-  VAULT_COMMON=$(common_directory "$FM_HOME/projects/vault") || exit 1
-  [ "$PROJECT_COMMON" != "$VAULT_COMMON" ] || knowledge_landing=yes
-fi
-if [ "$knowledge_landing" = yes ]; then
-  python3 -I "$SCRIPT_DIR/fm-knowledge-landing.py" "$PROJ" "$base" "$head" \
-    "$FM_HOME/data/jev/knowledge-landing-approvals/$ID" || exit 1
+KNOWLEDGE_CONFIG="${FM_CONFIG_OVERRIDE:-$FM_HOME/config}/knowledge-landing"
+if [ -e "$KNOWLEDGE_CONFIG" ] || [ -L "$KNOWLEDGE_CONFIG" ]; then
+  python3 -I "$SCRIPT_DIR/fm-knowledge-landing.py" "$KNOWLEDGE_CONFIG" "$FM_HOME" \
+    "$PROJ" "$base" "$head" "$ID" || exit 1
 fi
 
 hold_status=0

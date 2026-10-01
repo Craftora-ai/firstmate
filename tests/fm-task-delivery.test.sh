@@ -23,6 +23,9 @@ PROMOTE="$ROOT/bin/fm-promote.sh"
 PROJECT_MODE="$ROOT/bin/fm-project-mode.sh"
 MERGE_LOCAL="$ROOT/bin/fm-merge-local.sh"
 TMP_ROOT=$(fm_test_tmproot fm-task-delivery)
+# Knowledge-landing fixtures configure non-Git project directories.
+# Never let Git discover the developer checkout above an in-repo TMPDIR.
+export GIT_CEILING_DIRECTORIES="$TMP_ROOT${GIT_CEILING_DIRECTORIES:+:$GIT_CEILING_DIRECTORIES}"
 
 # A home with one registered project, one project directory, and a fake tmux that
 # refuses, so a spawn that clears the delivery checks still creates nothing.
@@ -492,20 +495,25 @@ EOF
   pass "fm-merge-local: a registry change cannot redirect an in-flight local-only task"
 }
 
-# The checker protocol is independent of private vault policy fixtures. These
-# cases drive the real landing entrypoint with real commits and a checker that
-# deliberately separates policy refusals, broken checks and moving refs.
-knowledge_case() {  # <name> [project-name]
+# The checker protocol is independent of any real checker's policy. These
+# cases drive the real landing entrypoint with real commits, a home opted in
+# through config/knowledge-landing, and a checker that deliberately separates
+# policy refusals, broken checks and moving refs.
+knowledge_case() {  # <name> [project-path-in-home] [checker: yes|no]
   KNOW_HOME="$TMP_ROOT/knowledge-$1/home"
-  KNOW_PROJECT="$KNOW_HOME/projects/${2:-vault}"
+  KNOW_PROJECT="$KNOW_HOME/${2:-projects/notes}"
   KNOW_ID=knowledge-task
-  KNOW_GATE='06 AI Team/AI Team Knowledge/Scripts/check-knowledge-landing.py'
-  mkdir -p "$KNOW_HOME/state" "$KNOW_HOME/data/jev/knowledge-landing-approvals" \
+  KNOW_GATE='tools/check landing.py'
+  KNOW_APPROVAL="$KNOW_HOME/data/landing-approvals/$KNOW_ID"
+  mkdir -p "$KNOW_HOME/state" "$KNOW_HOME/config" "$(dirname "$KNOW_APPROVAL")" \
     "$KNOW_PROJECT/$(dirname "$KNOW_GATE")"
+  printf '%s\n' '# opted in' "checker=$KNOW_GATE" 'approvals=data/landing-approvals' \
+    'ok=OK notes only: ' 'ok=OK drafts only: ' 'project=projects/notes' \
+    > "$KNOW_HOME/config/knowledge-landing"
   git -C "$KNOW_PROJECT" init -q -b main || fail "knowledge fixture init failed"
   git -C "$KNOW_PROJECT" config user.name fixture
   git -C "$KNOW_PROJECT" config user.email fixture@example.invalid
-  if [ "$1" != missing ] && [ "${2:-vault}" = vault ]; then
+  if [ "$1" != missing ] && [ "${3:-yes}" = yes ]; then
     cat > "$KNOW_PROJECT/$KNOW_GATE" <<'PY'
 import os
 from pathlib import Path
@@ -523,8 +531,7 @@ if case == "mismatch":
     head = base
 if case == "merge-base":
     base = head
-print("check-knowledge-landing: base %s head %s merge-base %s; 1 change(s); 0 migration target(s) in 0 slice(s)"
-      % (base, head, base))
+print("check-landing: base %s head %s merge-base %s; 1 change(s)" % (base, head, base))
 if case in ("refused", "unexpected"):
     print("FAIL A forbidden.py: requires approval")
     print("REFUSED 1 finding(s) in 1 change(s)")
@@ -542,10 +549,12 @@ if case == "race-base":
     subprocess.run(["git", "-C", root, "update-ref", "refs/heads/main", "refs/heads/bad"], check=True)
 if case == "dirty":
     Path(root, "untracked").write_text("concurrent edit")
-if case == "wip":
-    print("OK new dated WiP folders only (B1:A, 2026-09-29): 1 change(s); standing permission; a check, not a landing")
+if case == "unknown-ok":
+    print("OK something else: 1 change(s)")
+elif case == "drafts":
+    print("OK drafts only: 1 change(s)")
 else:
-    print("OK knowledge-note additions only (PRD K22): 1 change(s); a check, not a landing")
+    print("OK notes only: 1 change(s)")
 PY
   fi
   printf 'base\n' > "$KNOW_PROJECT/base"
@@ -576,9 +585,9 @@ knowledge_merge() {  # <checker-case> [shell-form] [landing-home]
 
 test_knowledge_landing_protocol() {
   local case approval
-  for case in pass wip refused stale symlink fifo missing empty error crash incomplete mismatch merge-base unexpected; do
+  for case in pass drafts refused stale symlink fifo missing empty error crash incomplete mismatch merge-base unexpected unknown-ok; do
     knowledge_case "$case"
-    approval="$KNOW_HOME/data/jev/knowledge-landing-approvals/$KNOW_ID"
+    approval=$KNOW_APPROVAL
     # A matching approval must never turn a checker failure into permission.
     case "$case" in
       stale) printf '%s\n' "$KNOW_BASE" > "$approval" ;;
@@ -587,7 +596,7 @@ test_knowledge_landing_protocol() {
       *) printf '%s\n' "$KNOW_HEAD" > "$approval" ;;
     esac
     case "$case" in
-      pass|wip|refused)
+      pass|drafts|refused)
         knowledge_merge "$case" || fail "knowledge $case refused: $(cat "$KNOW_HOME/out")"
         [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_HEAD" ] \
           || fail "knowledge $case landed a different commit"
@@ -615,7 +624,7 @@ test_knowledge_landing_protocol() {
         ;;
     esac
   done
-  pass "fm-merge-local: complete knowledge/WiP verdicts and exact approvals; broken checks never approved"
+  pass "fm-merge-local: configured pass verdicts and exact approvals; broken checks never approved"
 }
 
 test_knowledge_landing_shell_forms_and_scope() {
@@ -629,14 +638,47 @@ test_knowledge_landing_shell_forms_and_scope() {
     [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "refused shell form moved main"
   done
   knowledge_case alias
-  ln -s "$KNOW_PROJECT" "$KNOW_HOME/vault-alias"
-  printf 'project=%s\nmode=local-only\nbranch=fix/%s\n' "$KNOW_HOME/vault-alias" "$KNOW_ID" \
+  ln -s "$KNOW_PROJECT" "$KNOW_HOME/notes-alias"
+  printf 'project=%s\nmode=local-only\nbranch=fix/%s\n' "$KNOW_HOME/notes-alias" "$KNOW_ID" \
     > "$KNOW_HOME/state/$KNOW_ID.meta"
-  if knowledge_merge refused; then fail "vault path alias bypassed knowledge refusal"; fi
-  knowledge_case ordinary ordinary
-  knowledge_merge crash || fail "ordinary project gained a knowledge-check requirement"
+  if knowledge_merge refused; then fail "project path alias bypassed knowledge refusal"; fi
+  knowledge_case linked-worktree projects/notes no
+  git -C "$KNOW_PROJECT" checkout -q --detach || fail "configured checkout detach failed"
+  git -C "$KNOW_PROJECT" worktree add -q "$KNOW_HOME/notes-linked" main \
+    || fail "linked worktree fixture failed"
+  printf 'project=%s\nmode=local-only\nbranch=fix/%s\n' "$KNOW_HOME/notes-linked" "$KNOW_ID" \
+    > "$KNOW_HOME/state/$KNOW_ID.meta"
+  if knowledge_merge pass; then fail "configured project without its checker landed through a linked checkout"; fi
+  assert_contains "$(cat "$KNOW_HOME/out")" "knowledge checker is missing" "configured project did not require its checker"
+  knowledge_case ordinary projects/ordinary no
+  knowledge_merge crash || fail "ordinary project gained a knowledge-check requirement: $(cat "$KNOW_HOME/out")"
   [ ! -e "$KNOW_HOME/gate-args" ] || fail "ordinary project invoked the knowledge checker"
-  pass "fm-merge-local: shell spelling cannot bypass the vault gate; ordinary projects are unaffected"
+  pass "fm-merge-local: shell spelling and aliases cannot bypass the configured gate; ordinary projects are unaffected"
+}
+
+test_knowledge_landing_opt_in() {
+  # Without the home setting, even a project named vault that carries a
+  # checker keeps the existing landing path.
+  knowledge_case default-off projects/vault
+  rm "$KNOW_HOME/config/knowledge-landing"
+  knowledge_merge refused || fail "default-off home ran the knowledge check: $(cat "$KNOW_HOME/out")"
+  [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_HEAD" ] || fail "default-off landing missed the ship commit"
+  [ ! -e "$KNOW_HOME/gate-args" ] || fail "default-off home invoked the checker"
+
+  # A configured project that is not a Git work tree, or is nested inside
+  # another repository, matches nothing and leaves other landings alone.
+  knowledge_case non-git projects/outer no
+  mkdir -p "$KNOW_HOME/projects/notes" "$KNOW_PROJECT/plain"
+  printf 'project=projects/outer/plain\n' >> "$KNOW_HOME/config/knowledge-landing"
+  knowledge_merge pass || fail "non-Git or nested configured project refused an unrelated landing: $(cat "$KNOW_HOME/out")"
+  [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_HEAD" ] || fail "non-Git configured project blocked the landing"
+
+  knowledge_case malformed projects/ordinary no
+  printf 'checker=../escape.py\n' > "$KNOW_HOME/config/knowledge-landing"
+  if knowledge_merge pass; then fail "malformed knowledge-landing config was ignored"; fi
+  [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "malformed config moved main"
+  assert_contains "$(cat "$KNOW_HOME/out")" "needs one relative checker=" "malformed config was not named"
+  pass "fm-merge-local: the knowledge check is a per-home opt-in; non-Git and nested project settings match nothing"
 }
 
 test_knowledge_landing_home_mismatch() {
@@ -649,12 +691,12 @@ test_knowledge_landing_home_mismatch() {
   fi
   [ "$(git -C "$KNOW_PROJECT" rev-parse HEAD)" = "$KNOW_BASE" ] || fail "mismatched home moved main"
   assert_contains "$(cat "$KNOW_HOME/out")" "knowledge landing requires explicit approval" "mismatched home did not run the knowledge gate"
-  pass "fm-merge-local: repository identity protects vault tasks despite a mismatched FM_HOME"
+  pass "fm-merge-local: the captured checker protects opted-in tasks despite a mismatched FM_HOME"
 }
 
 test_knowledge_landing_python_environment() {
   local target poison
-  for target in fm-knowledge-landing.py check-knowledge-landing.py; do
+  for target in fm-knowledge-landing.py 'check landing.py'; do
     knowledge_case "python-$target"
     poison="$KNOW_HOME/poison"
     mkdir -p "$poison"
@@ -665,11 +707,10 @@ import os
 import sys
 
 if os.path.basename(sys.argv[0]) == os.environ["FM_PYTHON_TARGET"]:
-    if os.environ["FM_PYTHON_TARGET"] == "check-knowledge-landing.py":
+    if os.environ["FM_PYTHON_TARGET"] == "check landing.py":
         base, head = sys.argv[1:3]
-        print("check-knowledge-landing: base %s head %s merge-base %s; 1 change(s); 0 migration target(s) in 0 slice(s)"
-              % (base, head, base))
-        print("OK knowledge-note additions only (PRD K22): forged")
+        print("check-landing: base %s head %s merge-base %s" % (base, head, base))
+        print("OK notes only: forged")
     sys.stdout.flush()
     os._exit(0)
 PY
@@ -1851,6 +1892,7 @@ test_promotion_branch_command_is_shell_safe
 test_local_merge_uses_the_recorded_ship_branch
 test_knowledge_landing_protocol
 test_knowledge_landing_shell_forms_and_scope
+test_knowledge_landing_opt_in
 test_knowledge_landing_home_mismatch
 test_knowledge_landing_python_environment
 test_knowledge_landing_ref_races
