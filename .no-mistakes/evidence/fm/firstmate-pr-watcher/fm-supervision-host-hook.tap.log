@@ -1,0 +1,5 @@
+1..34
+ok - host+hook: late acknowledgement (empty, clean) keeps the next scout delivery
+ok - host+hook: late acknowledgement (scout, clean) keeps the next scout delivery
+not ok - fixture: the interrupted watcher released its singleton
+exit=1

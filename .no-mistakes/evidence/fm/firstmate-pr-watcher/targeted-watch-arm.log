@@ -1,0 +1,19 @@
+ok - watch-arm: --stop ends only this home's watcher and publishes downtime (normal)
+ok - watch-arm: --stop ends only this home's watcher and publishes downtime (record-failure)
+ok - watch-arm: confirmed takeover with a retained lock (acknowledged)
+ok - watch-arm: confirmed takeover with a retained lock (queued)
+ok - watch-arm: confirmed takeover with a retained lock (corrupt)
+ok - watch-arm: confirmed takeover with a retained lock (interrupted)
+ok - watch-arm: confirmed takeover with a retained lock (different-owner)
+ok - watch-arm: a planned host restart leaves an acknowledged episode closed
+ok - watch-arm: an actionable-check hand-off leaves an acknowledged episode closed
+ok - watch-arm: a non-zero exit with a planned-stop record stays closed
+ok - watch-arm: status 143 with no planned-stop record resurfaces
+ok - watch-arm: a stall eviction of an acknowledged episode resurfaces
+ok - watch-arm: a hangup without a planned-stop record resurfaces
+ok - watch-arm: a watcher killed without cleanup still resurfaces
+{run-worktree}/bin/fm-watch-arm.sh: line 913: 53553 Killed: 9                  "$WATCH" > "$child_out"
+WAKE_ACK_REQUIRED: after handling completes run bin/fm-wake-drain.sh --ack-through 2 --recovery-generation 56341.1795791281.BO3Tly
+{run-worktree}/bin/fm-watch-arm.sh: line 913: 70250 Killed: 9                  "$WATCH" > "$child_out"
+ok - watch-arm: re-arm surfaces every queued wake and an open remote decision after downtime
+exit=0

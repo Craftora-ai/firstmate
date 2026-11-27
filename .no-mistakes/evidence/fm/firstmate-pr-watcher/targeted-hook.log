@@ -1,0 +1,10 @@
+1..7
+ok - host+hook: late acknowledgement (empty, clean) keeps the next scout delivery
+ok - host+hook: late acknowledgement (scout, clean) keeps the next scout delivery
+ok - host+hook: late acknowledgement (scout, retained) keeps the next scout delivery
+ok - host+hook: re-arm delivers new bytes without replaying previously presented fleet history
+ok - host+hook: a park boundary over an acknowledged episode still rewakes main without a resurface
+ok - host+hook: a park-boundary hand-back that cannot write the marker delivers the failure notice
+ok - host+hook: a queued close survives a failed park-boundary hand-back
+FM_TEST_COMPLETE
+exit=0
