@@ -1,0 +1,39 @@
+### Idle home (no work, no outcomes)
+== BASE 977f813e idle drain ==
+exit=0 elapsed=1.808s
+output:
+<empty>
+fm-harness.sh starts: 2, fm-guard.sh starts: 1
+
+== HEAD 1440d4da idle drain ==
+exit=0 elapsed=0.664s
+output:
+<empty>
+fm-harness.sh starts: 0, fm-guard.sh starts: 1
+
+### Same home after one captain outcome is recorded
+== BASE drain with outcome ==
+exit=0 elapsed=1.372s
+output:
+BRANCH OUTCOMES (captain outcomes the supervision session recorded for you, one line per task, oldest first; each says what was true when it was recorded, so check the task's current state first, including its still-open decisions listed above under OPEN DECISIONS, and sort them into still open and already settled, such as a decision since answered, a PR since merged, or a task since finished - process the still-open ones as firstmate: tell the captain, land or merge what is ready, answer or escalate a decision, or act on a blocker; your reply to the captain covers only those, as if the settled ones had never been listed, and a settled one needs only the acknowledgement):
+[seq 1, recorded 0m ago] demo: outcome ready
+BRANCH OUTCOMES: after processing them run bin/fm-branch-outcome.sh mark-processed --through 1; until then every drain presents them again
+fm-harness.sh starts: 2, fm-guard.sh starts: 1
+
+== HEAD drain with outcome ==
+exit=0 elapsed=1.118s
+output:
+BRANCH OUTCOMES (captain outcomes the supervision session recorded for you, one line per task, oldest first; each says what was true when it was recorded, so check the task's current state first, including its still-open decisions listed above under OPEN DECISIONS, and sort them into still open and already settled, such as a decision since answered, a PR since merged, or a task since finished - process the still-open ones as firstmate: tell the captain, land or merge what is ready, answer or escalate a decision, or act on a blocker; your reply to the captain covers only those, as if the settled ones had never been listed, and a settled one needs only the acknowledgement):
+[seq 1, recorded 0m ago] demo: outcome ready
+BRANCH OUTCOMES: after processing them run bin/fm-branch-outcome.sh mark-processed --through 1; until then every drain presents them again
+fm-harness.sh starts: 1, fm-guard.sh starts: 1
+
+### Second drain after outcome acknowledged/presented (idle again)
+== HEAD repeat drain ==
+exit=0 elapsed=0.969s
+output:
+BRANCH OUTCOMES (captain outcomes the supervision session recorded for you, one line per task, oldest first; each says what was true when it was recorded, so check the task's current state first, including its still-open decisions listed above under OPEN DECISIONS, and sort them into still open and already settled, such as a decision since answered, a PR since merged, or a task since finished - process the still-open ones as firstmate: tell the captain, land or merge what is ready, answer or escalate a decision, or act on a blocker; your reply to the captain covers only those, as if the settled ones had never been listed, and a settled one needs only the acknowledgement):
+[seq 1, recorded 0m ago] demo: outcome ready
+BRANCH OUTCOMES: after processing them run bin/fm-branch-outcome.sh mark-processed --through 1; until then every drain presents them again
+fm-harness.sh starts: 1, fm-guard.sh starts: 1
+
